@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Planner Sud Francia</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef1ec;--surface:#ffffff;--surface-2:#f6f5ef;--ink:#2a3538;--muted:#68767b;--line:#dee2d8;
+    --lav:#7b6cd0;--lav-soft:#ece9fb;--sea:#3aa6b7;--sea-soft:#e0f1f3;--sage:#7f9a5e;
+    --apricot:#e59357;--plum:#b8628f;--gold:#e7c14e;--danger:#c15a48;--ok:#4c9a5e;--route:#e59357;
+    --shadow-sm:0 1px 2px rgba(30,40,44,.06);
+    --shadow:0 2px 10px rgba(30,40,44,.08),0 8px 30px rgba(30,40,44,.06);
+    --shadow-lg:0 10px 40px rgba(30,40,44,.18);
+    --r:14px;--mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --disp:"Fraunces",Georgia,serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--sans);color:var(--ink);background:var(--bg);
+    display:grid;grid-template-rows:auto 1fr;height:100dvh;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:.7rem;padding:.6rem .9rem;background:var(--surface);
+    border-bottom:1px solid var(--line);box-shadow:var(--shadow-sm);z-index:20}
+  header h1{font-family:var(--disp);font-weight:900;font-size:1.15rem;margin:0;letter-spacing:-.01em;
+    display:flex;align-items:center;gap:.5rem}
+  header h1 .dot{width:12px;height:12px;border-radius:50%;
+    background:conic-gradient(from 20deg,var(--lav),var(--sea),var(--sage),var(--apricot),var(--lav))}
+  header .spacer{margin-left:auto}
+  .btn{font:inherit;font-size:.82rem;font-weight:500;border:1px solid transparent;border-radius:10px;
+    padding:.45rem .7rem;cursor:pointer;background:var(--surface-2);color:var(--ink);white-space:nowrap;transition:.12s}
+  .btn:hover{filter:brightness(.98);transform:translateY(-1px)}
+  .btn:active{transform:none}
+  .btn.primary{background:var(--lav);color:#fff}
+  .btn.sea{background:var(--sea);color:#fff}
+  .btn.line{background:var(--surface);border-color:var(--line)}
+  .btn.mini{padding:.22rem .5rem;font-size:.73rem;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+  .btn.mini:hover{background:var(--surface-2)}
+  .menuBtn{display:flex;align-items:center;gap:.45rem}
+
+  main{display:grid;grid-template-columns:var(--panelw,420px) 6px 1fr;min-height:0}
+  #panel{overflow:auto;background:var(--bg);padding:.85rem;display:flex;flex-direction:column;gap:.85rem}
+  #resizer{cursor:col-resize;background:transparent;position:relative}
+  #resizer::after{content:"";position:absolute;inset:0 2px;border-radius:3px;background:var(--line);transition:.15s}
+  #resizer:hover::after{background:var(--lav)}
+  #mapwrap{position:relative;min-height:0}
+  #map{position:absolute;inset:0}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm);overflow:hidden}
+  .card>.h{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.6rem .8rem;border-bottom:1px solid var(--line)}
+  .card>.h .t{font-family:var(--disp);font-weight:600;font-size:.9rem}
+  .card>.h .n{font-size:.72rem;color:var(--muted);font-weight:600}
+  .card .body{padding:.8rem}
+
+  /* routes accordion */
+  .route{border-bottom:1px solid var(--line)}
+  .route:last-child{border-bottom:none}
+  .route .rh{display:flex;align-items:center;gap:.55rem;padding:.6rem .8rem;cursor:pointer;user-select:none}
+  .route .rh:hover{background:var(--surface-2)}
+  .route .chev{transition:.2s;color:var(--muted);font-size:.8rem;width:.9rem}
+  .route.open .chev{transform:rotate(90deg);color:var(--lav)}
+  .route .ricon{width:30px;height:30px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:1rem;background:var(--lav-soft);color:var(--lav)}
+  .route.open .ricon{background:var(--lav);color:#fff}
+  .route .rname{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .route .rcount{font-size:.72rem;color:var(--muted);font-family:var(--mono)}
+  .route .detail{display:none;padding:.2rem .3rem .7rem}
+  .route.open .detail{display:block}
+  .route .rtools{display:flex;flex-wrap:wrap;gap:.35rem;padding:.1rem .5rem .5rem}
+  .route .ropts{display:flex;gap:.8rem;flex-wrap:wrap;font-size:.74rem;color:var(--muted);padding:0 .5rem .5rem}
+  .route .ropts label{display:flex;align-items:center;gap:.3rem;cursor:pointer}
+  .rnotes{width:100%;font:inherit;font-size:.78rem;border:1px dashed var(--line);border-radius:8px;padding:.35rem .5rem;background:var(--surface-2);margin:0 .5rem .3rem;width:calc(100% - 1rem)}
+
+  ol.stops{list-style:none;margin:0;padding:0}
+  .stop{padding:.5rem .55rem;display:flex;gap:.55rem;align-items:flex-start;border-radius:10px}
+  .stop:hover{background:var(--surface-2)}
+  .idx{font-family:var(--mono);font-size:.72rem;color:#fff;background:var(--sea);border-radius:7px;
+    min-width:1.4rem;height:1.4rem;display:flex;align-items:center;justify-content:center;flex:none;margin-top:.1rem}
+  .thumb{width:46px;height:46px;border-radius:10px;flex:none;background:var(--surface-2) center/cover no-repeat;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.15rem;cursor:pointer;overflow:hidden}
+  .grow{flex:1;min-width:0}
+  .name{font-weight:600;font-size:.88rem;line-height:1.2}
+  .tags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.2rem}
+  .tag{font-size:.66rem;padding:.05rem .4rem;border-radius:20px;font-weight:600;white-space:nowrap}
+  .meta{font-size:.7rem;color:var(--muted);margin-top:.2rem;font-family:var(--mono);display:flex;gap:.5rem;flex-wrap:wrap}
+  .stars{color:var(--gold);letter-spacing:.02em}
+  .stars .off{color:var(--line)}
+  .desc{font-size:.77rem;color:var(--muted);margin-top:.25rem;white-space:pre-wrap;max-height:4.6rem;overflow:auto}
+  .links{margin-top:.3rem;display:flex;flex-wrap:wrap;gap:.3rem}
+  .links a{font-size:.71rem;color:var(--sea);text-decoration:none;border:1px solid var(--sea-soft);border-radius:6px;padding:.06rem .4rem;background:var(--sea-soft)}
+  .acts{display:flex;gap:.3rem;margin-top:.4rem;flex-wrap:wrap}
+  .leg{font-family:var(--mono);font-size:.69rem;color:var(--muted);padding:.15rem .6rem .15rem 2.4rem;display:flex;gap:.4rem;align-items:center}
+  .leg::before{content:"↓";color:var(--route);font-weight:700}
+  .dayhdr{font-family:var(--disp);font-weight:600;font-size:.78rem;color:var(--lav);padding:.35rem .6rem .15rem;display:flex;gap:.5rem;align-items:center}
+  .dayhdr::before{content:"◆";font-size:.6rem}
+  .empty{padding:1rem .8rem;text-align:center;color:var(--muted);font-size:.82rem}
+
+  /* filters + places */
+  .filters{display:flex;gap:.4rem;padding:.6rem .8rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .filters input,.filters select{font-size:.8rem;padding:.35rem .5rem;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+  .filters input{flex:1;min-width:8rem}
+  ul.places{list-style:none;margin:0;padding:0;max-height:40vh;overflow:auto}
+  .place{padding:.5rem .7rem;display:flex;gap:.5rem;align-items:flex-start;border-bottom:1px solid var(--line)}
+  .place:last-child{border-bottom:none}
+  .place.on{background:var(--lav-soft)}
+  .chkbox{margin-top:.35rem;flex:none;width:1.05rem;height:1.05rem;cursor:pointer;accent-color:var(--lav)}
+
+  /* form */
+  form label{display:block;font-size:.72rem;color:var(--muted);margin:.55rem 0 .2rem;font-weight:600}
+  form .row{display:flex;gap:.5rem}
+  form .row>div{flex:1}
+  input,select,textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:var(--surface);
+    border:1px solid var(--line);border-radius:10px;padding:.45rem .55rem}
+  textarea{resize:vertical}
+  #f_desc{min-height:6.5rem}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--lav);outline-offset:0;border-color:var(--lav)}
+  .hint{font-size:.68rem;color:var(--muted);margin-top:.2rem}
+  .chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.15rem}
+  .chip{font-size:.72rem;padding:.22rem .55rem;border-radius:20px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;color:var(--muted);transition:.1s}
+  .chip.sel{color:#fff;border-color:transparent}
+  .starpick{display:flex;gap:.15rem;font-size:1.15rem;color:var(--line);cursor:pointer}
+  .starpick .on{color:var(--gold)}
+  .coordwrap,.namewrap{display:flex;gap:.35rem}
+  .coordwrap input,.namewrap input{flex:1}
+  .rows{display:flex;flex-direction:column;gap:.3rem;margin-top:.15rem}
+  .rows .r{display:flex;gap:.35rem}
+  .rows .r input{flex:1}
+  .form-actions{display:flex;gap:.5rem;margin-top:.8rem}
+
+  /* budget */
+  .budget{display:flex;flex-direction:column;gap:.5rem}
+  .budget .peoplerow{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--muted)}
+  .budget .peoplerow input{width:4rem}
+  .bgrid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+  .bcell{background:var(--surface-2);border-radius:10px;padding:.5rem;text-align:center}
+  .bcell b{display:block;font-family:var(--disp);font-weight:600;font-size:1.15rem}
+  .bcell span{font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+
+  /* floating summary */
+  .floating{position:absolute;top:14px;right:14px;width:230px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r);box-shadow:var(--shadow-lg);z-index:500;overflow:hidden;display:none}
+  .floating.show{display:block}
+  .floating .fh{display:flex;align-items:center;gap:.4rem;padding:.5rem .6rem;background:var(--ink);color:#fff;cursor:move}
+  .floating .fh .t{font-family:var(--disp);font-weight:600;font-size:.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .floating .fh .x{background:none;border:none;color:#cbd3d5;cursor:pointer;font-size:1rem}
+  .floating .fgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;padding:.55rem}
+  .floating .fc{background:var(--surface-2);border-radius:9px;padding:.35rem .2rem;text-align:center}
+  .floating .fc b{display:block;font-family:var(--mono);font-size:.92rem}
+  .floating .fc span{font-size:.56rem;color:var(--muted);text-transform:uppercase}
+  .fabs{position:absolute;top:14px;right:14px;z-index:499}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(28,36,40,.55);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:9998;padding:1rem}
+  .modal.show{display:flex}
+  .modal .box{background:var(--surface);border-radius:16px;max-width:540px;width:100%;box-shadow:var(--shadow-lg);max-height:90dvh;overflow:auto}
+  .modal .box h3{font-family:var(--disp);font-weight:600;margin:0;padding:.9rem 1.1rem;border-bottom:1px solid var(--line);font-size:1.05rem;display:flex;justify-content:space-between;align-items:center}
+  .modal .box .body{padding:1.1rem}
+  .modal p{font-size:.83rem;line-height:1.5;color:var(--muted);margin:.4rem 0}
+  .modal code{background:var(--surface-2);padding:.05rem .3rem;border-radius:4px;font-family:var(--mono);font-size:.78rem}
+  .modal textarea{min-height:5rem;font-family:var(--mono);font-size:.72rem}
+  .menuItem{display:flex;gap:.7rem;align-items:flex-start;padding:.65rem;border:1px solid var(--line);border-radius:12px;margin-bottom:.5rem;cursor:pointer;background:var(--surface)}
+  .menuItem:hover{background:var(--surface-2);border-color:var(--lav)}
+  .menuItem .ic{font-size:1.2rem;width:1.6rem;text-align:center}
+  .menuItem .mt{font-weight:600;font-size:.86rem}
+  .menuItem .md{font-size:.74rem;color:var(--muted);margin-top:.1rem}
+  .x{cursor:pointer;color:var(--muted);font-size:1.1rem;background:none;border:none}
+
+  .toast{position:fixed;left:50%;bottom:1.3rem;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:.55rem .95rem;border-radius:10px;font-size:.83rem;box-shadow:var(--shadow-lg);opacity:0;transition:.2s;pointer-events:none;z-index:9999}
+  .toast.show{opacity:1}
+  .lightbox{position:fixed;inset:0;background:rgba(24,30,33,.92);display:none;align-items:center;justify-content:center;z-index:9999;padding:1rem}
+  .lightbox.show{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:10px}
+
+  .mk{background:none;border:none}
+  .mk-dot{width:36px;height:36px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);
+    background-position:center;background-size:cover;display:flex;align-items:center;justify-content:center;position:relative}
+  .mk-emoji{font-size:16px}
+  .mk-badge{position:absolute;top:-7px;right:-7px;background:var(--sea);color:#fff;font-family:var(--mono);
+    font-size:10px;min-width:17px;height:17px;border-radius:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff}
+  .mk.dim{opacity:.4}
+  .mk.dim .mk-dot{width:24px;height:24px;border-width:2px}
+
+  @media (max-width:860px){
+    main{grid-template-columns:1fr;grid-template-rows:44vh 6px 1fr}
+    #resizer{display:none}
+    #mapwrap{order:-1}
+    ul.places{max-height:30vh}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span> Sud Francia</h1>
+  <div class="spacer"></div>
+  <button class="btn line" id="btnSummary" title="Riepilogo rapido">⤢ Riepilogo</button>
+  <button class="btn primary menuBtn" id="btnMenu">☰ Menu</button>
+</header>
+
+<main>
+  <section id="panel">
+    <!-- PERCORSI -->
+    <div class="card">
+      <div class="h"><span class="t">Percorsi</span>
+        <button class="btn mini" id="btnRouteNew">＋ Nuovo</button></div>
+      <div id="routeList"></div>
+    </div>
+
+    <!-- LUOGHI -->
+    <div class="card">
+      <div class="h"><span class="t">Tutti i luoghi</span><span class="n" id="placeCount"></span></div>
+      <div class="filters">
+        <input id="search" placeholder="Cerca per nome…" />
+        <select id="filterTag"><option value="">Tutti i tag</option></select>
+      </div>
+      <ul class="places" id="placeList"></ul>
+    </div>
+
+    <!-- BUDGET -->
+    <div class="card">
+      <div class="h"><span class="t">Budget di gruppo</span><span class="n">percorso aperto</span></div>
+      <div class="body budget" id="budget"></div>
+    </div>
+
+    <!-- FORM -->
+    <div class="card">
+      <div class="h"><span class="t" id="formTitle">Nuovo luogo</span>
+        <button class="btn mini" id="btnFormToggle">apri/chiudi</button></div>
+      <div class="body" id="formBody">
+        <form id="stopForm" autocomplete="off">
+          <label>Nome luogo *</label>
+          <div class="namewrap">
+            <input id="f_name" required placeholder="es. Gorges du Tarn – Sainte-Énimie" />
+            <button type="button" class="btn mini" id="btnGeocode" title="Trova coordinate dal nome">⌖</button>
+          </div>
+
+          <label>Coordinate (lat, lng) *</label>
+          <input id="f_coord" required placeholder="44.365, 3.412" />
+          <div class="hint">Clic sulla mappa, oppure ⌖ per cercarle dal nome.</div>
+
+          <label>Tipo (uno o più tag)</label>
+          <div class="chips" id="f_tags"></div>
+
+          <div class="row">
+            <div><label>Grado impegno</label>
+              <select id="f_effort">
+                <option value="1">molto facile</option><option value="2">facile</option>
+                <option value="3" selected>medio</option><option value="4">impegnativo</option><option value="5">mortale</option>
+              </select>
+            </div>
+            <div><label>Voto personale</label><div class="starpick" id="f_rating"></div></div>
+          </div>
+
+          <div class="row">
+            <div><label>Data arrivo</label><input type="date" id="f_arrival" /></div>
+            <div><label>Data partenza</label><input type="date" id="f_departure" /></div>
+          </div>
+          <div class="row">
+            <div><label>Ore ideali</label><input type="number" id="f_hours" min="0" step="0.5" placeholder="3" /></div>
+            <div><label>Costo (€)</label><input type="number" id="f_cost" min="0" step="1" placeholder="0" /></div>
+          </div>
+
+          <label>Descrizione
+            <button type="button" class="btn mini" id="btnAutoDesc" style="float:right;margin-top:-.1rem">✨ Auto</button>
+          </label>
+          <textarea id="f_desc" placeholder="Cosa vederci, note pratiche, orari…"></textarea>
+
+          <label>Foto (link diretti a immagini)</label>
+          <div class="rows" id="f_photos_rows"></div>
+          <button type="button" class="btn mini" id="btnAddPhoto" style="margin-top:.35rem">＋ foto</button>
+          <div class="hint">La prima foto diventa l’icona sulla mappa.</div>
+
+          <label>Link a siti</label>
+          <div class="rows" id="f_links_rows"></div>
+          <button type="button" class="btn mini" id="btnAddLink" style="margin-top:.35rem">＋ link</button>
+
+          <label class="hint" style="display:flex;gap:.35rem;align-items:center;margin-top:.6rem">
+            <input type="checkbox" id="f_addToRoute" checked style="width:auto"> aggiungi al percorso aperto</label>
+
+          <div class="form-actions">
+            <button type="submit" class="btn primary" id="btnSave">Salva luogo</button>
+            <button type="button" class="btn line" id="btnCancel" hidden>Annulla</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="resizer"></div>
+
+  <div id="mapwrap">
+    <div id="map"></div>
+    <button class="btn line fabs" id="btnSummary2" title="Riepilogo" style="display:none">⤢</button>
+    <div class="floating" id="floating">
+      <div class="fh" id="floatingHead"><span class="t" id="floatName">Riepilogo</span>
+        <button class="x" id="floatClose">✕</button></div>
+      <div class="fgrid" id="floatGrid"></div>
+    </div>
+  </div>
+</main>
+
+<!-- MENU MODAL -->
+<div class="modal" id="menuModal"><div class="box">
+  <h3>Menu <button class="x" data-close>✕</button></h3>
+  <div class="body">
+    <div class="menuItem" id="miShare"><div class="ic">🔗</div><div><div class="mt">Condividi</div><div class="md">Copia un codice (funziona ovunque) o un link universale se il sito è pubblicato.</div></div></div>
+    <div class="menuItem" id="miSave"><div class="ic">💾</div><div><div class="mt">Salva progetto su file</div><div class="md">Scarica tutto (luoghi + percorsi) in un .json, ottimo con git.</div></div></div>
+    <div class="menuItem" id="miOpen"><div class="ic">📂</div><div><div class="mt">Apri progetto da file</div><div class="md">Carica un .json salvato prima. Sostituisce il progetto attuale.</div></div></div>
+    <div class="menuItem" id="miBulk"><div class="ic">📋</div><div><div class="mt">Importa luoghi in blocco</div><div class="md">Incolla una lista <code>nome ; lat ; lng</code>, una per riga.</div></div></div>
+    <div class="menuItem" id="miHelp"><div class="ic">❓</div><div><div class="mt">Guida &amp; condivisione</div><div class="md">Come salvare, condividere e pubblicare su GitHub Pages.</div></div></div>
+    <input type="file" id="fileOpen" accept="application/json" hidden />
+  </div>
+</div></div>
+
+<!-- SHARE MODAL -->
+<div class="modal" id="shareModal"><div class="box">
+  <h3>Condividi <button class="x" data-close>✕</button></h3>
+  <div class="body">
+    <p><b>Codice</b> — funziona ovunque, anche tra dispositivi diversi. Copialo e mandalo; l’altro apre la sua app e fa “Incolla codice”.</p>
+    <div class="row" style="gap:.4rem"><button class="btn primary" id="btnCopyCode">Copia codice</button><button class="btn sea" id="btnPasteCode">Incolla codice…</button></div>
+    <textarea id="shareCode" readonly style="margin-top:.5rem" placeholder="Il codice appare qui"></textarea>
+    <p style="margin-top:.9rem"><b>Link</b> — funziona solo se la app è pubblicata (non su <code>localhost</code>).</p>
+    <div class="row" style="gap:.4rem"><button class="btn line" id="btnCopyLink">Copia link</button></div>
+    <textarea id="shareLink" readonly style="margin-top:.5rem" placeholder="Il link appare qui"></textarea>
+  </div>
+</div></div>
+
+<!-- BULK MODAL -->
+<div class="modal" id="bulkModal"><div class="box">
+  <h3>Importa luoghi in blocco <button class="x" data-close>✕</button></h3>
+  <div class="body">
+    <p>Una riga per luogo, nel formato <code>nome ; lat ; lng</code>. Esempio:</p>
+    <textarea id="bulkText" placeholder="Sainte-Énimie ; 44.365 ; 3.412&#10;Cascades du Sautadet ; 44.075 ; 4.520"></textarea>
+    <div class="row" style="gap:.4rem;margin-top:.6rem">
+      <label class="hint" style="display:flex;align-items:center;gap:.35rem;flex:1"><input type="checkbox" id="bulkToRoute" style="width:auto"> aggiungi anche al percorso aperto</label>
+      <button class="btn primary" id="btnBulkAdd">Aggiungi</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- HELP MODAL -->
+<div class="modal" id="helpModal"><div class="box">
+  <h3>Guida &amp; condivisione <button class="x" data-close>✕</button></h3>
+  <div class="body">
+    <p><b>Dove stanno i dati.</b> Le tue tappe non sono su GitHub: GitHub tiene solo l’app. I dati vivono nel browser (salvataggio automatico su questo indirizzo) e, soprattutto, nel <b>file .json</b> o nel <b>link/codice</b> che generi tu. Quelli sono ciò che sposti tra dispositivi.</p>
+    <p><b>Lavora su un solo indirizzo</b> (il sito pubblico) per non avere “cassetti” separati tra localhost e sito.</p>
+    <p><b>Link universale:</b> pubblica <code>index.html</code> su GitHub Pages (Settings → Pages → branch main → Save). Otterrai un URL tipo <code>https://tuonome.github.io/Planner-fr/</code>: da lì “Copia link” produce un indirizzo che si apre ovunque.</p>
+    <p><b>Migliorare la app senza perdere le tappe:</b> ricarica solo <code>index.html</code> su GitHub; i dati (nel tuo .json/link) restano intatti grazie alla migrazione automatica di versione.</p>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img id="lightboxImg" alt="" /></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+"use strict";
+
+/* ---------- tipi (tag) ---------- */
+const TYPES = [
+  ["Animali","🦅","#8a6d3b","#f0e7d6"],
+  ["Gola / Fiume","🏞️","#2f8f8f","#dcefee"],
+  ["Cascata","💧","#3f86c6","#dde9f6"],
+  ["Lago","🌊","#2ba0aa","#d9f0f1"],
+  ["Mare","⛵","#2e8fb8","#dcecf5"],
+  ["Montagna / Escursione","⛰️","#6f8a4e","#e7eedd"],
+  ["Spiaggia","🏖️","#c9962f","#f6ecd3"],
+  ["Borgo","🏘️","#b0632e","#f2e2d5"],
+  ["Castello","🏰","#7a5aa0","#e9e2f4"],
+  ["Abbazia","⛪","#6a7280","#e6e9ee"],
+  ["Grotta / Insolito","✨","#c65a2e","#f6ddd0"],
+  ["Cibo / Vino","🍷","#a63a58","#f3dde3"],
+  ["Campeggio","⛺","#3f8a52","#dcefe0"],
+  ["Altro","📍","#66737a","#e6eaec"],
+];
+const typeMeta = (t) => TYPES.find((x) => x[0] === t) || TYPES[TYPES.length - 1];
+const EFFORT = ["", "molto facile", "facile", "medio", "impegnativo", "mortale"];
+const primaryTag = (s) => (s.tags && s.tags[0]) || "Altro";
+
+/* ---------- stato ---------- */
+let state = { v: 3, stops: [], routes: [], activeRouteId: null, expandedRouteId: null, people: 2, panelw: 420 };
+let legs = [], routeGeom = null;
+let editingId = null;
+let formTags = new Set(), formRating = 0;
+let ui = { search: "", filterTag: "" };
+let map, markersLayer, routeLayer;
+
+const $ = (id) => document.getElementById(id);
+const uid = () => Math.random().toString(36).slice(2, 9);
+const byId = (id) => state.stops.find((s) => s.id === id);
+const expandedRoute = () => state.routes.find((r) => r.id === state.expandedRouteId);
+
+/* ---------- mappa ---------- */
+function initMap() {
+  map = L.map("map", { zoomControl: true }).setView([44.0, 3.4], 7);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+  routeLayer = L.layerGroup().addTo(map);
+  map.on("click", (e) => { $("f_coord").value = e.latlng.lat.toFixed(5) + ", " + e.latlng.lng.toFixed(5); $("formBody").style.display = ""; });
+}
+function cssUrl(u) { return String(u).replace(/['")\\]/g, ""); }
+function stopMarker(s, indexInRoute, dim) {
+  const [, emoji, color] = typeMeta(primaryTag(s));
+  const photo = (s.photos || [])[0];
+  const bg = photo ? `background-image:url('${cssUrl(photo)}')` : `background:${color}`;
+  const inner = photo ? "" : `<span class="mk-emoji">${emoji}</span>`;
+  const badge = indexInRoute ? `<b class="mk-badge">${indexInRoute}</b>` : "";
+  return L.divIcon({ className: "mk" + (dim ? " dim" : ""), html: `<div class="mk-dot" style="${bg}">${inner}${badge}</div>`,
+    iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -16] });
+}
+function refreshMap() {
+  markersLayer.clearLayers(); routeLayer.clearLayers();
+  const r = expandedRoute();
+  const order = r ? r.stopIds : [];
+  state.stops.forEach((s) => {
+    const pos = order.indexOf(s.id);
+    const inRoute = pos >= 0;
+    const dim = r ? !inRoute : false; // se un percorso è aperto, gli altri luoghi sono trasparenti
+    const m = L.marker([s.lat, s.lng], { icon: stopMarker(s, inRoute ? pos + 1 : 0, dim) });
+    const [tname, emoji] = typeMeta(primaryTag(s));
+    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br>${emoji} ${escapeHtml((s.tags || []).join(", ") || tname)}` +
+      (s.rating ? `<br>${"★".repeat(s.rating)}` : "") +
+      `<br><button onclick="app.edit('${s.id}')">Modifica</button> ` +
+      (r ? `<button onclick="app.toggleInclude('${s.id}')">${inRoute ? "Togli" : "Aggiungi"}</button>` : ""));
+    m.addTo(markersLayer);
+  });
+  if (r && r.stopIds.length >= 2) {
+    const pts = r.stopIds.map(byId).filter(Boolean).map((s) => [s.lat, s.lng]);
+    if (routeGeom) L.polyline(routeGeom, { color: css("--route"), weight: 5, opacity: .85 }).addTo(routeLayer);
+    else L.polyline(pts, { color: css("--route"), weight: 3, opacity: .5, dashArray: "5 7" }).addTo(routeLayer);
+  }
+}
+function fitToExpanded() {
+  const r = expandedRoute();
+  const pts = (r ? r.stopIds.map(byId).filter(Boolean) : state.stops);
+  if (pts.length) map.fitBounds(L.latLngBounds(pts.map((s) => [s.lat, s.lng])).pad(0.25), { maxZoom: 12 });
+}
+
+/* ---------- routing ---------- */
+async function calcRoute(r) {
+  legs = []; routeGeom = null;
+  const pts = r.stopIds.map(byId).filter(Boolean);
+  if (pts.length < 2) { toast("Servono almeno 2 tappe."); return; }
+  toast("Calcolo percorso…");
+  const coords = pts.map((s) => `${s.lng},${s.lat}`).join(";");
+  const base = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  const ex = []; if (r.opts.avoidMotorway) ex.push("motorway"); if (r.opts.avoidToll) ex.push("toll");
+  const ask = async (exc) => { const res = await fetch(base + (exc ? "&exclude=" + exc : "")); const d = await res.json(); if (d.code !== "Ok" || !d.routes || !d.routes.length) throw new Error(d.code || "no route"); return d.routes[0]; };
+  try {
+    let route;
+    try { route = await ask(ex.join(",")); }
+    catch (e1) { if (ex.length) { route = await ask(""); toast("Esclusione non disponibile: percorso standard."); } else throw e1; }
+    legs = route.legs.map((l) => ({ distance: l.distance, duration: l.duration }));
+    routeGeom = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    toast("Percorso su strade reali calcolato.");
+  } catch (err) {
+    for (let i = 0; i < pts.length - 1; i++) { const d = haversine(pts[i], pts[i + 1]) * 1.3; legs.push({ distance: d, duration: (d / 1000 / 75) * 3600, estimated: true }); }
+    toast("OSRM non raggiungibile: distanze stimate.");
+  }
+  renderAll();
+}
+function haversine(a, b) { const R = 6371000, t = Math.PI / 180; const dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t; const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLng / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(s)); }
+function optimizeOrder(r) {
+  const ids = [...r.stopIds]; if (ids.length < 3) { toast("Servono almeno 3 tappe."); return; }
+  const pts = ids.map(byId); const used = Array(pts.length).fill(false); const order = [0]; used[0] = true;
+  for (let k = 1; k < pts.length; k++) { const last = pts[order[order.length - 1]]; let best = -1, bd = Infinity; for (let j = 0; j < pts.length; j++) if (!used[j]) { const d = haversine(last, pts[j]); if (d < bd) { bd = d; best = j; } } order.push(best); used[best] = true; }
+  r.stopIds = order.map((i) => ids[i]); legs = []; routeGeom = null; persist(); renderAll(); toast("Ordine ottimizzato.");
+}
+function openInGMaps(r) {
+  const pts = r.stopIds.map(byId).filter(Boolean); if (!pts.length) { toast("Percorso vuoto."); return; }
+  window.open("https://www.google.com/maps/dir/" + pts.map((s) => `${s.lat},${s.lng}`).join("/"), "_blank");
+}
+function exportGPX(r) {
+  const pts = r.stopIds.map(byId).filter(Boolean); if (!pts.length) { toast("Percorso vuoto."); return; }
+  let g = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Planner" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+  pts.forEach((s) => { g += `  <wpt lat="${s.lat}" lon="${s.lng}"><name>${xml(s.name)}</name></wpt>\n`; });
+  g += `  <rte><name>${xml(r.name)}</name>\n` + pts.map((s) => `    <rtept lat="${s.lat}" lon="${s.lng}"><name>${xml(s.name)}</name></rtept>`).join("\n") + `\n  </rte>\n</gpx>`;
+  download(`${r.name}.gpx`, g, "application/gpx+xml"); toast("GPX esportato.");
+}
+
+/* ---------- totali ---------- */
+function routeTotals(r) {
+  const pts = r ? r.stopIds.map(byId).filter(Boolean) : [];
+  const dist = legs.reduce((a, l) => a + l.distance, 0);
+  const dur = legs.reduce((a, l) => a + l.duration, 0);
+  const cost = pts.reduce((a, s) => a + (Number(s.cost) || 0), 0);
+  const visit = pts.reduce((a, s) => a + (Number(s.hours) || 0), 0);
+  const est = legs.some((l) => l.estimated);
+  return { n: pts.length, dist, dur, cost, visit, est, nights: nights(pts) };
+}
+function nights(pts) { const ds = pts.flatMap((s) => [s.arrival, s.departure]).filter(Boolean).sort(); if (ds.length < 2) return "—"; const n = Math.round((new Date(ds[ds.length - 1]) - new Date(ds[0])) / 86400000); return n > 0 ? n : "—"; }
+function fmtDur(sec) { const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h ? `${h}h${String(m).padStart(2, "0")}` : `${m}m`; }
+function fmtKm(m) { return m ? (m / 1000).toFixed(0) : "—"; }
+
+/* ---------- render percorsi (fisarmonica) ---------- */
+function renderRoutes() {
+  const c = $("routeList");
+  if (!state.routes.length) { c.innerHTML = `<div class="empty">Nessun percorso. Crea il primo con “＋ Nuovo”.</div>`; return; }
+  c.innerHTML = state.routes.map((r) => {
+    const open = r.id === state.expandedRouteId;
+    let detail = "";
+    if (open) {
+      const pts = r.stopIds.map(byId).filter(Boolean);
+      const T = routeTotals(r);
+      let rows = "";
+      if (!pts.length) rows = `<div class="empty">Percorso vuoto. In “Tutti i luoghi” spunta le tappe da includere.</div>`;
+      else {
+        let lastDate = null;
+        pts.forEach((s, i) => {
+          if (s.arrival && s.arrival !== lastDate) { rows += `<div class="dayhdr">${fmtDate(s.arrival)}</div>`; lastDate = s.arrival; }
+          rows += stopRow(s, i + 1);
+          if (legs[i]) rows += `<div class="leg">${fmtKm(legs[i].distance)} km · ${fmtDur(legs[i].duration)}${legs[i].estimated ? " (stima)" : ""}</div>`;
+        });
+      }
+      detail = `<div class="detail">
+        <div class="ropts">
+          <label><input type="checkbox" class="ck-mw" ${r.opts.avoidMotorway ? "checked" : ""}> evita autostrade</label>
+          <label><input type="checkbox" class="ck-toll" ${r.opts.avoidToll ? "checked" : ""}> evita pedaggi</label>
+        </div>
+        <div class="rtools">
+          <button class="btn mini bt-calc">Calcola percorso</button>
+          <button class="btn mini bt-opt">Ottimizza</button>
+          <button class="btn mini bt-gmap">Google Maps</button>
+          <button class="btn mini bt-gpx">GPX</button>
+          <button class="btn mini bt-ren">Rinomina</button>
+          <button class="btn mini bt-dup">Duplica</button>
+          <button class="btn mini bt-del">Elimina</button>
+        </div>
+        <textarea class="rnotes" placeholder="Note del percorso…">${escapeHtml(r.notes || "")}</textarea>
+        <ol class="stops">${rows}</ol>
+      </div>`;
+    }
+    return `<div class="route ${open ? "open" : ""}" data-id="${r.id}">
+      <div class="rh"><span class="chev">▶</span><span class="ricon">🧭</span>
+        <span class="rname">${escapeHtml(r.name)}</span><span class="rcount">${r.stopIds.length} tappe</span></div>
+      ${detail}</div>`;
+  }).join("");
+  // wire
+  c.querySelectorAll(".route").forEach((el) => {
+    const id = el.dataset.id; const r = state.routes.find((x) => x.id === id);
+    el.querySelector(".rh").addEventListener("click", () => toggleRoute(id));
+    if (!el.classList.contains("open")) return;
+    el.querySelector(".ck-mw").addEventListener("change", (e) => { r.opts.avoidMotorway = e.target.checked; legs = []; routeGeom = null; persist(); });
+    el.querySelector(".ck-toll").addEventListener("change", (e) => { r.opts.avoidToll = e.target.checked; legs = []; routeGeom = null; persist(); });
+    el.querySelector(".bt-calc").addEventListener("click", () => calcRoute(r));
+    el.querySelector(".bt-opt").addEventListener("click", () => optimizeOrder(r));
+    el.querySelector(".bt-gmap").addEventListener("click", () => openInGMaps(r));
+    el.querySelector(".bt-gpx").addEventListener("click", () => exportGPX(r));
+    el.querySelector(".bt-ren").addEventListener("click", () => { const n = prompt("Rinomina:", r.name); if (n) { r.name = n.trim(); persist(); renderAll(); } });
+    el.querySelector(".bt-dup").addEventListener("click", () => { const cp = { id: uid(), name: r.name + " (copia)", stopIds: [...r.stopIds], opts: { ...r.opts }, notes: r.notes }; state.routes.push(cp); state.expandedRouteId = cp.id; state.activeRouteId = cp.id; legs = []; routeGeom = null; persist(); renderAll(); });
+    el.querySelector(".bt-del").addEventListener("click", () => { if (!confirm("Eliminare il percorso? (i luoghi restano)")) return; state.routes = state.routes.filter((x) => x.id !== id); if (state.expandedRouteId === id) state.expandedRouteId = null; legs = []; routeGeom = null; persist(); renderAll(); });
+    el.querySelector(".rnotes").addEventListener("input", (e) => { r.notes = e.target.value; persistSoon(); });
+  });
+}
+function toggleRoute(id) {
+  state.expandedRouteId = state.expandedRouteId === id ? null : id;
+  if (state.expandedRouteId) state.activeRouteId = id;
+  legs = []; routeGeom = null; persist(); renderAll(); if (state.expandedRouteId) fitToExpanded();
+}
+function stopRow(s, idx) {
+  const photo = (s.photos || [])[0];
+  const [, emoji] = typeMeta(primaryTag(s));
+  const thumb = photo ? `<div class="thumb" style="background-image:url('${escapeAttr(cssUrl(photo))}')" onclick="app.zoom('${escapeAttr(photo)}')"></div>` : `<div class="thumb">${emoji}</div>`;
+  return `<li class="stop"><div class="idx">${idx}</div>${thumb}<div class="grow">
+    <div class="name">${escapeHtml(s.name)}</div>
+    ${tagRow(s)}
+    <div class="meta">${metaBits(s)}</div>
+    ${s.desc ? `<div class="desc">${escapeHtml(s.desc)}</div>` : ""}
+    ${linkRow(s)}
+    <div class="acts">
+      <button class="btn mini" onclick="app.move('${s.id}',-1)">↑</button>
+      <button class="btn mini" onclick="app.move('${s.id}',1)">↓</button>
+      <button class="btn mini" onclick="app.fly('${s.id}')">Mappa</button>
+      <button class="btn mini" onclick="app.edit('${s.id}')">Modifica</button>
+      <button class="btn mini" onclick="app.toggleInclude('${s.id}')">Togli</button>
+    </div></div></li>`;
+}
+function tagRow(s) { const t = (s.tags || []); if (!t.length) return ""; return `<div class="tags">${t.map((n) => { const [, , col, bg] = typeMeta(n); return `<span class="tag" style="background:${bg};color:${col}">${n}</span>`; }).join("")}</div>`; }
+function starHtml(n) { let h = ""; for (let i = 1; i <= 5; i++) h += `<span class="${i <= n ? "" : "off"}">★</span>`; return `<span class="stars">${h}</span>`; }
+function metaBits(s) {
+  const bits = [];
+  if (s.effort) bits.push(EFFORT[s.effort]);
+  if (s.hours) bits.push(s.hours + "h");
+  if (s.cost) bits.push(s.cost + "€");
+  const dates = [s.arrival, s.departure].filter(Boolean).map(fmtDate).join(" → ");
+  if (dates) bits.push(dates);
+  let out = escapeHtml(bits.join(" · "));
+  if (s.rating) out += " " + starHtml(s.rating);
+  return out;
+}
+function linkRow(s) { const l = (s.links || []); if (!l.length) return ""; return `<div class="links">${l.map((u) => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener">${escapeHtml(shortUrl(u))}</a>`).join("")}</div>`; }
+
+/* ---------- render luoghi ---------- */
+function renderPlaces() {
+  const ul = $("placeList"); const r = expandedRoute(); const inSet = new Set(r ? r.stopIds : []);
+  let list = state.stops.slice();
+  if (ui.search) list = list.filter((s) => s.name.toLowerCase().includes(ui.search.toLowerCase()));
+  if (ui.filterTag) list = list.filter((s) => (s.tags || []).includes(ui.filterTag));
+  $("placeCount").textContent = state.stops.length + " luoghi";
+  if (!list.length) { ul.innerHTML = `<li class="empty">Nessun luogo. Aggiungine uno col form qui sotto.</li>`; return; }
+  ul.innerHTML = list.map((s) => {
+    const photo = (s.photos || [])[0]; const [, emoji] = typeMeta(primaryTag(s));
+    const thumb = photo ? `<div class="thumb" style="background-image:url('${escapeAttr(cssUrl(photo))}')" onclick="app.zoom('${escapeAttr(photo)}')"></div>` : `<div class="thumb">${emoji}</div>`;
+    const on = inSet.has(s.id);
+    const chk = r ? `<input type="checkbox" class="chkbox" ${on ? "checked" : ""} onchange="app.toggleInclude('${s.id}')" title="Nel percorso aperto">` : "";
+    return `<li class="place ${on ? "on" : ""}">${chk}${thumb}<div class="grow">
+      <div class="name">${escapeHtml(s.name)}</div>${tagRow(s)}
+      <div class="meta">${metaBits(s)}</div>
+      <div class="acts">
+        <button class="btn mini" onclick="app.fly('${s.id}')">Mappa</button>
+        <button class="btn mini" onclick="app.edit('${s.id}')">Modifica</button>
+        <button class="btn mini" onclick="app.del('${s.id}')">Elimina</button>
+      </div></div></li>`;
+  }).join("");
+}
+
+/* ---------- budget ---------- */
+function renderBudget() {
+  const r = expandedRoute(); const T = routeTotals(r);
+  const people = Math.max(1, state.people || 1);
+  const per = T.cost ? Math.round(T.cost / people) : 0;
+  $("budget").innerHTML = `
+    <div class="peoplerow">Persone: <input type="number" id="peopleInp" min="1" step="1" value="${people}"> ${r ? `· percorso <b style="color:var(--ink)">${escapeHtml(r.name)}</b>` : "· apri un percorso"}</div>
+    <div class="bgrid">
+      <div class="bcell"><b>${T.cost || 0} €</b><span>costo tappe</span></div>
+      <div class="bcell"><b>${per} €</b><span>a persona</span></div>
+      <div class="bcell"><b>${fmtKm(T.dist)}${T.est ? "*" : ""}</b><span>km</span></div>
+      <div class="bcell"><b>${T.dur ? fmtDur(T.dur) : "—"}${T.est ? "*" : ""}</b><span>guida</span></div>
+    </div>`;
+  $("peopleInp").addEventListener("change", (e) => { state.people = Math.max(1, parseInt(e.target.value, 10) || 1); persist(); renderBudget(); });
+}
+
+/* ---------- floating summary ---------- */
+function updateFloating() {
+  const r = expandedRoute(); const T = routeTotals(r);
+  $("floatName").textContent = r ? r.name : "Nessun percorso";
+  $("floatGrid").innerHTML = [["tappe", T.n], ["km", fmtKm(T.dist) + (T.est ? "*" : "")], ["guida", T.dur ? fmtDur(T.dur) : "—"], ["€", T.cost || "—"], ["ore", T.visit || "—"], ["notti", T.nights]]
+    .map(([l, v]) => `<div class="fc"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+
+/* ---------- app actions ---------- */
+const app = {
+  edit(id) { const s = byId(id); if (!s) return; editingId = id; fillForm(s); $("formBody").style.display = ""; $("formTitle").textContent = "Modifica luogo"; $("btnSave").textContent = "Aggiorna"; $("btnCancel").hidden = false; $("f_addToRoute").parentElement.style.display = "none"; $("panel").scrollTo({ top: $("panel").scrollHeight, behavior: "smooth" }); map.panTo([s.lat, s.lng]); },
+  del(id) { if (!confirm("Eliminare questo luogo da tutti i percorsi?")) return; state.stops = state.stops.filter((s) => s.id !== id); state.routes.forEach((r) => r.stopIds = r.stopIds.filter((x) => x !== id)); if (editingId === id) clearForm(); legs = []; routeGeom = null; persist(); renderAll(); },
+  move(id, dir) { const r = expandedRoute(); if (!r) return; const i = r.stopIds.indexOf(id), j = i + dir; if (i < 0 || j < 0 || j >= r.stopIds.length) return; [r.stopIds[i], r.stopIds[j]] = [r.stopIds[j], r.stopIds[i]]; legs = []; routeGeom = null; persist(); renderAll(); },
+  toggleInclude(id) { const r = expandedRoute(); if (!r) { toast("Apri prima un percorso."); return; } const i = r.stopIds.indexOf(id); if (i >= 0) r.stopIds.splice(i, 1); else r.stopIds.push(id); legs = []; routeGeom = null; persist(); renderAll(); },
+  fly(id) { const s = byId(id); if (s) map.flyTo([s.lat, s.lng], 12); },
+  zoom(u) { $("lightboxImg").src = u; $("lightbox").classList.add("show"); },
+};
+window.app = app;
+
+/* ---------- form ---------- */
+function buildTagChips() {
+  $("f_tags").innerHTML = TYPES.map(([n, e, col, bg]) => `<span class="chip" data-tag="${escapeAttr(n)}">${e} ${n}</span>`).join("");
+  $("f_tags").querySelectorAll(".chip").forEach((ch) => ch.addEventListener("click", () => {
+    const t = ch.dataset.tag; const [, , col, bg] = typeMeta(t);
+    if (formTags.has(t)) { formTags.delete(t); ch.classList.remove("sel"); ch.style.background = ""; ch.style.color = ""; }
+    else { formTags.add(t); ch.classList.add("sel"); ch.style.background = col; ch.style.color = "#fff"; }
+  }));
+}
+function syncTagChips() {
+  $("f_tags").querySelectorAll(".chip").forEach((ch) => {
+    const t = ch.dataset.tag; const [, , col] = typeMeta(t);
+    if (formTags.has(t)) { ch.classList.add("sel"); ch.style.background = col; ch.style.color = "#fff"; }
+    else { ch.classList.remove("sel"); ch.style.background = ""; ch.style.color = ""; }
+  });
+}
+function buildStars() {
+  $("f_rating").innerHTML = [1, 2, 3, 4, 5].map((i) => `<span data-v="${i}">★</span>`).join("") + `<span data-v="0" title="azzera" style="font-size:.8rem;margin-left:.3rem;color:var(--muted)">✕</span>`;
+  $("f_rating").querySelectorAll("span").forEach((st) => st.addEventListener("click", () => { formRating = parseInt(st.dataset.v, 10); syncStars(); }));
+}
+function syncStars() { $("f_rating").querySelectorAll("span[data-v]").forEach((st) => { const v = parseInt(st.dataset.v, 10); if (v >= 1) st.classList.toggle("on", v <= formRating); }); }
+function buildTypeFilter() { $("filterTag").innerHTML = `<option value="">Tutti i tag</option>` + TYPES.map(([n, e]) => `<option value="${n}">${e} ${n}</option>`).join(""); }
+
+function rowInput(container, value) { const div = document.createElement("div"); div.className = "r"; div.innerHTML = `<input type="url" value="${escapeAttr(value || "")}" placeholder="https://…"><button type="button" class="btn mini">✕</button>`; div.querySelector("button").addEventListener("click", () => div.remove()); container.appendChild(div); }
+function collectRows(c) { return [...c.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean); }
+function setRows(c, vals) { c.innerHTML = ""; (vals && vals.length ? vals : [""]).forEach((v) => rowInput(c, v)); }
+
+function readForm() {
+  const c = parseCoord($("f_coord").value);
+  if (!$("f_name").value.trim()) { toast("Manca il nome."); return null; }
+  if (!c) { toast("Coordinate non valide (lat, lng)."); return null; }
+  return { id: editingId || uid(), name: $("f_name").value.trim(), lat: c.lat, lng: c.lng,
+    tags: [...formTags], effort: parseInt($("f_effort").value, 10) || 3, rating: formRating,
+    arrival: $("f_arrival").value || "", departure: $("f_departure").value || "",
+    hours: $("f_hours").value ? parseFloat($("f_hours").value) : "", cost: $("f_cost").value ? parseFloat($("f_cost").value) : "",
+    desc: $("f_desc").value.trim(), photos: collectRows($("f_photos_rows")), links: collectRows($("f_links_rows")) };
+}
+function fillForm(s) {
+  $("f_name").value = s.name || ""; $("f_coord").value = s.lat != null ? `${s.lat}, ${s.lng}` : "";
+  formTags = new Set(s.tags || []); syncTagChips(); formRating = s.rating || 0; syncStars();
+  $("f_effort").value = s.effort || 3; $("f_arrival").value = s.arrival || ""; $("f_departure").value = s.departure || "";
+  $("f_hours").value = s.hours ?? ""; $("f_cost").value = s.cost ?? ""; $("f_desc").value = s.desc || "";
+  setRows($("f_photos_rows"), s.photos); setRows($("f_links_rows"), s.links);
+}
+function clearForm() {
+  editingId = null; $("stopForm").reset(); formTags = new Set(); syncTagChips(); formRating = 0; syncStars();
+  $("f_effort").value = 3; setRows($("f_photos_rows"), []); setRows($("f_links_rows"), []);
+  $("formTitle").textContent = "Nuovo luogo"; $("btnSave").textContent = "Salva luogo"; $("btnCancel").hidden = true;
+  $("f_addToRoute").parentElement.style.display = ""; $("f_addToRoute").checked = true;
+}
+function saveStop(e) {
+  e.preventDefault(); const s = readForm(); if (!s) return;
+  const idx = state.stops.findIndex((x) => x.id === s.id);
+  if (idx >= 0) state.stops[idx] = s; else state.stops.push(s);
+  if (idx < 0 && $("f_addToRoute").checked) { const r = expandedRoute(); if (r && !r.stopIds.includes(s.id)) r.stopIds.push(s.id); }
+  const wasNew = idx < 0; clearForm(); legs = []; routeGeom = null; persist(); renderAll();
+  if (wasNew) map.panTo([s.lat, s.lng]); toast(idx >= 0 ? "Aggiornato." : "Aggiunto.");
+}
+
+/* ---------- geocoding + auto-descrizione ---------- */
+async function geocode() {
+  const q = $("f_name").value.trim(); if (!q) { toast("Scrivi prima un nome."); return; }
+  toast("Cerco le coordinate…");
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=it&q=${encodeURIComponent(q)}`, { headers: { Accept: "application/json" } });
+    const d = await res.json(); if (!d.length) { toast("Nessun risultato."); return; }
+    $("f_coord").value = (+d[0].lat).toFixed(5) + ", " + (+d[0].lon).toFixed(5); map.setView([d[0].lat, d[0].lon], 12);
+    toast("Trovato: " + d[0].display_name.split(",").slice(0, 2).join(","));
+  } catch (e) { toast("Ricerca non riuscita (rete?)."); }
+}
+async function autoDesc() {
+  const q = $("f_name").value.trim(); if (!q) { toast("Scrivi prima il nome."); return; }
+  toast("Cerco una descrizione…");
+  try {
+    const u = `https://it.wikipedia.org/w/api.php?origin=*&action=query&format=json&prop=extracts&exintro=1&explaintext=1&redirects=1&generator=search&gsrlimit=1&gsrsearch=${encodeURIComponent(q)}`;
+    const res = await fetch(u); const d = await res.json();
+    const pages = d && d.query && d.query.pages; if (!pages) { toast("Niente su Wikipedia."); return; }
+    const p = Object.values(pages)[0]; let ex = (p && p.extract || "").trim();
+    if (!ex) { toast("Niente su Wikipedia."); return; }
+    if (ex.length > 700) ex = ex.slice(0, 700).replace(/\s+\S*$/, "") + "…";
+    const cur = $("f_desc").value.trim();
+    $("f_desc").value = cur ? cur + "\n\n" + ex : ex;
+    toast("Descrizione da Wikipedia (rivedila).");
+  } catch (e) { toast("Auto-descrizione non riuscita."); }
+}
+
+/* ---------- persistenza ---------- */
+const LS_KEY = "sudfrancia-planner-v3";
+let saveTimer, softTimer;
+function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
+function persistSoon() { clearTimeout(softTimer); softTimer = setTimeout(persist, 500); }
+function normalize(d) {
+  if (!d) return null;
+  // v3 già pronto
+  if (d.v === 3 && d.routes) { d.people = d.people || 2; d.stops.forEach(migStop); d.routes.forEach(migRoute); fixActive(d); return d; }
+  // v2 (type singolo, routes presenti)
+  if (d.routes) { d.stops = (d.stops || []).map(migStop); d.routes.forEach(migRoute); d.v = 3; d.people = d.people || 2; d.expandedRouteId = d.expandedRouteId || null; fixActive(d); return d; }
+  // v1 (solo stops)
+  const stops = (d.stops || []).map(migStop);
+  const r = { id: uid(), name: "Percorso 1", stopIds: stops.map((s) => s.id), opts: d.opts || { avoidMotorway: false, avoidToll: false }, notes: "" };
+  return { v: 3, stops, routes: [r], activeRouteId: r.id, expandedRouteId: null, people: 2, panelw: 420 };
+}
+function migStop(s) { s.id = s.id || uid(); if (!s.tags) s.tags = s.type ? [s.type] : []; if (s.rating == null) s.rating = 0; if (!s.links) s.links = []; if (!s.photos) s.photos = []; delete s.type; return s; }
+function migRoute(r) { r.opts = r.opts || { avoidMotorway: false, avoidToll: false }; r.stopIds = r.stopIds || []; if (r.notes == null) r.notes = ""; return r; }
+function fixActive(d) { if (!d.routes.length) return; if (!d.activeRouteId || !d.routes.find((r) => r.id === d.activeRouteId)) d.activeRouteId = d.routes[0].id; if (d.expandedRouteId && !d.routes.find((r) => r.id === d.expandedRouteId)) d.expandedRouteId = null; }
+function ensureRoute() { if (!state.routes.length) { const r = { id: uid(), name: "Percorso 1", stopIds: [], opts: { avoidMotorway: false, avoidToll: false }, notes: "" }; state.routes.push(r); state.activeRouteId = r.id; } }
+function loadLocal() { try { const raw = localStorage.getItem(LS_KEY) || localStorage.getItem("sudfrancia-planner-v2") || localStorage.getItem("sudfrancia-planner-v1"); if (raw) { const n = normalize(JSON.parse(raw)); if (n) state = n; } } catch (e) {} }
+
+/* ---------- codice / link ---------- */
+async function gzip(str) { const cs = new CompressionStream("gzip"); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
+async function gunzip(b) { const ds = new DecompressionStream("gzip"); const w = ds.writable.getWriter(); w.write(b); w.close(); return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer()); }
+function b64u(b) { let s = ""; for (const x of b) s += String.fromCharCode(x); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function unb64u(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; const bin = atob(s); const b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }
+async function encodeState() { const j = JSON.stringify(state); if (typeof CompressionStream !== "undefined") return "z" + b64u(await gzip(j)); return "p" + b64u(new TextEncoder().encode(j)); }
+async function decodeState(str) { const m = str[0], p = unb64u(str.slice(1)); const j = m === "z" ? await gunzip(p) : new TextDecoder().decode(p); return normalize(JSON.parse(j)); }
+async function openShare() { closeModals(); const enc = await encodeState(); $("shareCode").value = enc; const url = location.origin + location.pathname + "#" + enc; history.replaceState(null, "", url); $("shareLink").value = url; $("shareModal").classList.add("show"); }
+async function pasteCode() { const code = prompt("Incolla il codice ricevuto:"); if (!code) return; try { const n = await decodeState(code.trim()); if (!confirm("Sostituire il progetto attuale?")) return; state = n; ensureRoute(); legs = []; routeGeom = null; persist(); renderAll(); fitToExpanded(); closeModals(); toast("Progetto caricato."); } catch (e) { toast("Codice non valido."); } }
+
+/* ---------- file + bulk ---------- */
+function saveFile() { download("progetto-sud-francia.json", JSON.stringify(state, null, 2), "application/json"); toast("Progetto salvato."); }
+function openFile(file) { const r = new FileReader(); r.onload = () => { try { const n = normalize(JSON.parse(r.result)); if (!n) throw 0; if (!confirm("Aprire questo progetto? Sostituisce l’attuale.")) return; state = n; ensureRoute(); legs = []; routeGeom = null; persist(); renderAll(); fitToExpanded(); toast("Progetto aperto."); } catch (e) { toast("File non valido."); } }; r.readAsText(file); }
+function bulkAdd() {
+  const lines = $("bulkText").value.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const r = expandedRoute(); const toRoute = $("bulkToRoute").checked && r; let added = 0;
+  lines.forEach((line) => { const parts = line.split(/\s*[;|]\s*/); if (parts.length < 3) return; const name = parts[0]; const c = parseCoord(parts[1] + "," + parts[2]); if (!name || !c) return; const s = { id: uid(), name, lat: c.lat, lng: c.lng, tags: [], effort: 3, rating: 0, arrival: "", departure: "", hours: "", cost: "", desc: "", photos: [], links: [] }; state.stops.push(s); if (toRoute) r.stopIds.push(s.id); added++; });
+  persist(); renderAll(); fitToExpanded(); closeModals(); toast(`Aggiunti ${added} luoghi.`);
+}
+
+/* ---------- resizer ---------- */
+function setupResizer() {
+  const rz = $("resizer"); let dragging = false;
+  const move = (x) => { const w = Math.min(720, Math.max(320, x - 4)); document.documentElement.style.setProperty("--panelw", w + "px"); state.panelw = w; if (map) map.invalidateSize(); };
+  rz.addEventListener("pointerdown", (e) => { dragging = true; rz.setPointerCapture(e.pointerId); });
+  rz.addEventListener("pointermove", (e) => { if (dragging) move(e.clientX); });
+  rz.addEventListener("pointerup", (e) => { dragging = false; persist(); });
+}
+
+/* ---------- floating drag ---------- */
+function setupFloating() {
+  const f = $("floating"), head = $("floatingHead"); let dx = 0, dy = 0, drag = false;
+  head.addEventListener("pointerdown", (e) => { drag = true; const r = f.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; head.setPointerCapture(e.pointerId); });
+  head.addEventListener("pointermove", (e) => { if (!drag) return; const wrap = $("mapwrap").getBoundingClientRect(); f.style.left = (e.clientX - wrap.left - dx) + "px"; f.style.top = (e.clientY - wrap.top - dy) + "px"; f.style.right = "auto"; });
+  head.addEventListener("pointerup", () => drag = false);
+  const toggle = () => { f.classList.toggle("show"); if (f.classList.contains("show")) updateFloating(); };
+  $("btnSummary").addEventListener("click", toggle);
+  $("floatClose").addEventListener("click", () => f.classList.remove("show"));
+}
+
+/* ---------- util ---------- */
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#e59357"; }
+function parseCoord(str) { const m = String(str).split(/[,; ]+/).map(parseFloat).filter((x) => !isNaN(x)); if (m.length < 2) return null; const [lat, lng] = m; if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null; return { lat, lng }; }
+function shortUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u.slice(0, 22); } }
+function fmtDate(d) { if (!d) return ""; const p = d.split("-"); return p.length === 3 ? `${p[2]}/${p[1]}` : d; }
+function download(name, text, type) { const b = new Blob([text], { type }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function escapeAttr(s) { return escapeHtml(s).replace(/'/g, "&#39;"); }
+function xml(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function closeModals() { document.querySelectorAll(".modal").forEach((m) => m.classList.remove("show")); }
+let toastTimer; function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600); }
+
+/* ---------- render all ---------- */
+function renderAll() { renderRoutes(); renderPlaces(); renderBudget(); refreshMap(); updateFloating(); }
+
+/* ---------- init ---------- */
+async function boot() {
+  buildTagChips(); buildStars(); buildTypeFilter(); initMap(); setupResizer(); setupFloating();
+  if (location.hash.length > 1) { try { state = await decodeState(decodeURIComponent(location.hash.slice(1))); } catch (e) { loadLocal(); } }
+  else loadLocal();
+  ensureRoute();
+  if (state.panelw) document.documentElement.style.setProperty("--panelw", state.panelw + "px");
+  clearForm(); renderAll(); fitToExpanded();
+
+  $("stopForm").addEventListener("submit", saveStop);
+  $("btnCancel").addEventListener("click", clearForm);
+  $("btnGeocode").addEventListener("click", geocode);
+  $("btnAutoDesc").addEventListener("click", autoDesc);
+  $("btnAddPhoto").addEventListener("click", () => rowInput($("f_photos_rows"), ""));
+  $("btnAddLink").addEventListener("click", () => rowInput($("f_links_rows"), ""));
+  $("btnFormToggle").addEventListener("click", () => { const b = $("formBody"); b.style.display = b.style.display === "none" ? "" : "none"; });
+  $("search").addEventListener("input", (e) => { ui.search = e.target.value; renderPlaces(); });
+  $("filterTag").addEventListener("change", (e) => { ui.filterTag = e.target.value; renderPlaces(); });
+  $("btnRouteNew").addEventListener("click", () => { const n = prompt("Nome del nuovo percorso:", `Percorso ${state.routes.length + 1}`); if (n === null) return; const r = { id: uid(), name: n.trim() || `Percorso ${state.routes.length + 1}`, stopIds: [], opts: { avoidMotorway: false, avoidToll: false }, notes: "" }; state.routes.push(r); state.expandedRouteId = r.id; state.activeRouteId = r.id; legs = []; routeGeom = null; persist(); renderAll(); });
+
+  // menu
+  $("btnMenu").addEventListener("click", () => $("menuModal").classList.add("show"));
+  $("miShare").addEventListener("click", openShare);
+  $("miSave").addEventListener("click", () => { closeModals(); saveFile(); });
+  $("miOpen").addEventListener("click", () => $("fileOpen").click());
+  $("fileOpen").addEventListener("change", (e) => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ""; });
+  $("miBulk").addEventListener("click", () => { closeModals(); $("bulkModal").classList.add("show"); });
+  $("miHelp").addEventListener("click", () => { closeModals(); $("helpModal").classList.add("show"); });
+  $("btnBulkAdd").addEventListener("click", bulkAdd);
+
+  $("btnCopyCode").addEventListener("click", async () => { $("shareCode").select(); try { await navigator.clipboard.writeText($("shareCode").value); toast("Codice copiato."); } catch (e) { toast("Copia manualmente."); } });
+  $("btnCopyLink").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("shareLink").value); toast(location.hostname === "localhost" || location.protocol === "file:" ? "Link copiato (su localhost non si apre altrove: usa il Codice)." : "Link copiato."); } catch (e) { toast("Copia manualmente."); } });
+  $("btnPasteCode").addEventListener("click", pasteCode);
+
+  document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModals));
+  document.querySelectorAll(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) closeModals(); }));
+  $("lightbox").addEventListener("click", () => $("lightbox").classList.remove("show"));
+}
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>

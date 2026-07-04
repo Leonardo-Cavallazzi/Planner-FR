@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Planner Sud Francia</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+  :root{
+    --ink:#1f2a30;--ink-soft:#556169;--paper:#f3efe6;--paper-2:#e8e2d4;--line:#cdc4b2;
+    --accent:#1f6f6f;--accent-2:#c65a2e;--route:#c65a2e;--card:#fbf9f3;--sel:#eaf3f0;
+    --ok:#2f7a3f;--danger:#a23b2d;
+    --shadow:0 1px 2px rgba(31,42,48,.08),0 6px 18px rgba(31,42,48,.06);
+    --mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--sans);color:var(--ink);background:var(--paper);
+    display:grid;grid-template-rows:auto 1fr;height:100dvh;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.5rem .8rem;
+    background:var(--ink);color:var(--paper);border-bottom:3px solid var(--accent-2)}
+  header h1{font-size:1rem;margin:0;font-weight:650;white-space:nowrap}
+  header h1 .pin{color:var(--accent-2)}
+  header .save{font-size:.68rem;color:#9fd0b0;font-family:var(--mono);margin-right:auto;white-space:nowrap}
+  header .tools{display:flex;gap:.35rem;flex-wrap:wrap}
+  .btn{font:inherit;font-size:.8rem;border:1px solid transparent;border-radius:7px;
+    padding:.4rem .6rem;cursor:pointer;background:var(--paper-2);color:var(--ink);white-space:nowrap}
+  .btn:hover{filter:brightness(.97)}
+  .btn.primary{background:var(--accent-2);color:#fff}
+  .btn.accent{background:var(--accent);color:#fff}
+  .btn.ghost{background:transparent;color:var(--paper);border-color:#3c4a50}
+  .btn.ghost:hover{background:#2a363c}
+  .btn.mini{padding:.2rem .45rem;font-size:.72rem;background:var(--paper);border:1px solid var(--line)}
+  .btn.mini:hover{background:#fff}
+
+  main{display:grid;grid-template-columns:400px 1fr;min-height:0}
+  #panel{overflow:auto;background:var(--paper);border-right:1px solid var(--line);
+    padding:.75rem;display:flex;flex-direction:column;gap:.75rem}
+  #map{min-height:0}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+  .card>h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft);
+    margin:0;padding:.55rem .7rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .card .body{padding:.7rem}
+
+  /* route bar */
+  .routebar{display:flex;flex-direction:column;gap:.5rem;padding:.7rem}
+  .routebar .top{display:flex;gap:.4rem;align-items:center}
+  .routebar select{flex:1;font-weight:650}
+  .routebar .rowbtns{display:flex;gap:.35rem;flex-wrap:wrap}
+  .routebar .opts{display:flex;gap:.8rem;flex-wrap:wrap;font-size:.75rem;color:var(--ink-soft)}
+  .routebar .opts label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
+
+  /* summary */
+  .totals{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;padding:.7rem}
+  .totals .t{background:var(--paper-2);border-radius:8px;padding:.45rem .5rem;text-align:center}
+  .totals .t b{display:block;font-family:var(--mono);font-size:1.05rem;line-height:1.1}
+  .totals .t span{font-size:.62rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em}
+
+  /* tabs */
+  .tabs{display:flex;gap:.3rem;padding:.5rem .5rem 0}
+  .tab{flex:1;text-align:center;font-size:.78rem;padding:.45rem;border:1px solid var(--line);
+    border-bottom:none;border-radius:8px 8px 0 0;background:var(--paper-2);cursor:pointer;color:var(--ink-soft)}
+  .tab.active{background:var(--card);color:var(--ink);font-weight:650}
+  .tabpane{display:none}
+  .tabpane.active{display:block}
+
+  .filters{display:flex;gap:.4rem;padding:.55rem .7rem;border-bottom:1px solid var(--line)}
+  .filters input,.filters select{font-size:.8rem;padding:.35rem .45rem;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .filters input{flex:1}
+
+  ol.stops,ul.places{list-style:none;margin:0;padding:0}
+  .stop,.place{padding:.55rem .7rem;border-bottom:1px solid var(--line);display:flex;gap:.55rem;align-items:flex-start}
+  .stop:last-child,.place:last-child{border-bottom:none}
+  .place.inroute{background:var(--sel)}
+  .thumb{width:44px;height:44px;border-radius:8px;flex:none;background:var(--paper-2) center/cover no-repeat;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;overflow:hidden}
+  .idx{font-family:var(--mono);font-size:.72rem;color:#fff;background:var(--accent);border-radius:6px;
+    min-width:1.35rem;height:1.35rem;display:flex;align-items:center;justify-content:center;flex:none;margin-top:.15rem}
+  .grow{flex:1;min-width:0}
+  .name{font-weight:650;font-size:.88rem;line-height:1.2}
+  .meta{font-size:.69rem;color:var(--ink-soft);margin-top:.12rem;font-family:var(--mono)}
+  .desc{font-size:.77rem;color:var(--ink-soft);margin-top:.25rem;white-space:pre-wrap}
+  .links{margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.3rem}
+  .links a{font-size:.72rem;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:5px;padding:.05rem .35rem;background:#fff}
+  .acts{display:flex;gap:.3rem;margin-top:.4rem;flex-wrap:wrap}
+  .effort{color:var(--accent-2);letter-spacing:.05em}
+  .leg{font-family:var(--mono);font-size:.68rem;color:var(--ink-soft);padding:.2rem .7rem .2rem 2.6rem;display:flex;gap:.4rem;align-items:center}
+  .leg::before{content:"↓";color:var(--route)}
+  .empty{padding:1.1rem .7rem;text-align:center;color:var(--ink-soft);font-size:.82rem}
+  .chkbox{margin-top:.2rem;flex:none;width:1.05rem;height:1.05rem;cursor:pointer}
+
+  /* form */
+  form label{display:block;font-size:.71rem;color:var(--ink-soft);margin:.5rem 0 .15rem;font-weight:600}
+  form .row{display:flex;gap:.5rem}
+  form .row>div{flex:1}
+  input,select,textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:.4rem .5rem}
+  textarea{resize:vertical}
+  #f_desc{min-height:7.5rem}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+  .hint{font-size:.67rem;color:var(--ink-soft);margin-top:.15rem}
+  .rows{display:flex;flex-direction:column;gap:.3rem;margin-top:.2rem}
+  .rows .r{display:flex;gap:.35rem}
+  .rows .r input{flex:1}
+  .coordwrap{display:flex;gap:.35rem}
+  .coordwrap input{flex:1}
+  .form-actions{display:flex;gap:.5rem;margin-top:.75rem}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(20,26,29,.6);display:none;align-items:center;justify-content:center;z-index:9998;padding:1rem}
+  .modal.show{display:flex}
+  .modal .box{background:var(--card);border-radius:12px;max-width:520px;width:100%;box-shadow:var(--shadow);max-height:90dvh;overflow:auto}
+  .modal .box h3{margin:0;padding:.8rem 1rem;border-bottom:1px solid var(--line);font-size:.95rem;display:flex;justify-content:space-between;align-items:center}
+  .modal .box .body{padding:1rem}
+  .modal textarea{min-height:5rem;font-family:var(--mono);font-size:.72rem}
+  .modal p{font-size:.82rem;line-height:1.45;color:var(--ink-soft);margin:.4rem 0}
+  .modal code{background:var(--paper-2);padding:.05rem .3rem;border-radius:4px;font-family:var(--mono);font-size:.78rem}
+  .x{cursor:pointer;color:var(--ink-soft);font-size:1.1rem;background:none;border:none}
+
+  .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:.5rem .9rem;border-radius:8px;font-size:.82rem;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none;z-index:9999}
+  .toast.show{opacity:1}
+  .lightbox{position:fixed;inset:0;background:rgba(20,26,29,.9);display:none;align-items:center;justify-content:center;z-index:9999;padding:1rem}
+  .lightbox.show{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:8px}
+
+  .mk{background:none;border:none}
+  .mk-dot{width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35);
+    background-position:center;background-size:cover;display:flex;align-items:center;justify-content:center;position:relative}
+  .mk-emoji{font-size:15px}
+  .mk-badge{position:absolute;top:-7px;right:-7px;background:var(--route);color:#fff;font-family:var(--mono);
+    font-size:10px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff}
+  .mk.dim .mk-dot{opacity:.45;width:22px;height:22px}
+
+  @media (max-width:860px){
+    main{grid-template-columns:1fr;grid-template-rows:42vh 1fr}
+    #map{order:-1;border-bottom:1px solid var(--line)}
+    #panel{border-right:none}
+    .totals{grid-template-columns:repeat(3,1fr)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="pin">◆</span> Planner Sud Francia</h1>
+  <span class="save" id="saveState">salvato in locale</span>
+  <div class="tools">
+    <button class="btn primary" id="btnShare">Condividi</button>
+    <button class="btn ghost" id="btnSaveFile">Salva file</button>
+    <button class="btn ghost" id="btnOpenFile">Apri file</button>
+    <button class="btn ghost" id="btnHelp">?</button>
+    <input type="file" id="fileOpen" accept="application/json" hidden />
+  </div>
+</header>
+
+<main>
+  <section id="panel">
+    <!-- ROUTE BAR -->
+    <div class="card">
+      <div class="routebar">
+        <div class="top">
+          <select id="routeSel" title="Percorso attivo"></select>
+          <button class="btn mini" id="btnRouteNew" title="Nuovo percorso">+ Nuovo</button>
+        </div>
+        <div class="rowbtns">
+          <button class="btn mini" id="btnRouteRename">Rinomina</button>
+          <button class="btn mini" id="btnRouteDup">Duplica</button>
+          <button class="btn mini" id="btnRouteDel">Elimina</button>
+          <button class="btn mini" id="btnOptimize" title="Riordina per vicinanza">Ottimizza ordine</button>
+          <button class="btn mini" id="btnGPX" title="Esporta traccia GPS">Esporta GPX</button>
+        </div>
+        <div class="opts">
+          <label><input type="checkbox" id="optMotorway" /> Evita autostrade</label>
+          <label><input type="checkbox" id="optToll" /> Evita pedaggi</label>
+          <button class="btn accent" id="btnRoute" style="margin-left:auto">Calcola percorso</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="card">
+      <h2>Riepilogo · <span id="sumName" style="text-transform:none;letter-spacing:0;color:var(--ink)"></span></h2>
+      <div class="totals" id="totals"></div>
+    </div>
+
+    <!-- TABS -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" data-tab="route" id="tabRouteBtn">Percorso attivo</div>
+        <div class="tab" data-tab="places" id="tabPlacesBtn">Tutti i luoghi</div>
+      </div>
+
+      <div class="tabpane active" id="pane-route">
+        <ol class="stops" id="routeList"></ol>
+      </div>
+
+      <div class="tabpane" id="pane-places">
+        <div class="filters">
+          <input id="search" placeholder="Cerca per nome…" />
+          <select id="filterType"><option value="">Tutti i tipi</option></select>
+        </div>
+        <ul class="places" id="placeList"></ul>
+      </div>
+    </div>
+
+    <!-- FORM -->
+    <div class="card">
+      <h2 id="formTitle">Nuovo luogo <button class="btn mini" id="btnFormToggle" style="text-transform:none">apri/chiudi</button></h2>
+      <div class="body" id="formBody">
+        <form id="stopForm" autocomplete="off">
+          <label>Nome luogo *</label>
+          <div class="coordwrap">
+            <input id="f_name" required placeholder="es. Gorges du Tarn – Sainte-Énimie" />
+            <button type="button" class="btn mini" id="btnGeocode" title="Trova coordinate dal nome">Trova ⌖</button>
+          </div>
+
+          <label>Coordinate (lat, lng) *</label>
+          <input id="f_coord" required placeholder="44.365, 3.412" />
+          <div class="hint">Clic sulla mappa per riempirle, oppure premi “Trova ⌖” per cercarle dal nome.</div>
+
+          <div class="row">
+            <div><label>Tipo</label><select id="f_type"></select></div>
+            <div><label>Grado impegno</label>
+              <select id="f_effort">
+                <option value="1">1 · molto facile</option><option value="2">2 · facile</option>
+                <option value="3" selected>3 · medio</option><option value="4">4 · impegnativo</option>
+                <option value="5">5 · molto impegnativo</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div><label>Data arrivo</label><input type="date" id="f_arrival" /></div>
+            <div><label>Data partenza</label><input type="date" id="f_departure" /></div>
+          </div>
+          <div class="row">
+            <div><label>Ore permanenza ideali</label><input type="number" id="f_hours" min="0" step="0.5" placeholder="3" /></div>
+            <div><label>Costo (€)</label><input type="number" id="f_cost" min="0" step="1" placeholder="0" /></div>
+          </div>
+
+          <label>Descrizione</label>
+          <textarea id="f_desc" placeholder="Cosa vederci, note pratiche, avvisi, orari…"></textarea>
+
+          <label>Foto (link diretti a immagini)</label>
+          <div class="rows" id="f_photos_rows"></div>
+          <button type="button" class="btn mini" id="btnAddPhoto" style="margin-top:.35rem">+ foto</button>
+          <div class="hint">La prima foto diventa l’icona della tappa sulla mappa. Usa URL di immagini online.</div>
+
+          <label>Link a siti (sito ufficiale, prenotazioni, articoli…)</label>
+          <div class="rows" id="f_links_rows"></div>
+          <button type="button" class="btn mini" id="btnAddLink" style="margin-top:.35rem">+ link</button>
+
+          <label class="hint" style="display:flex;gap:.35rem;align-items:center;margin-top:.6rem">
+            <input type="checkbox" id="f_addToRoute" checked style="width:auto"> aggiungi al percorso attivo
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" class="btn primary" id="btnSave">Salva luogo</button>
+            <button type="button" class="btn" id="btnCancel" hidden>Annulla</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="map"></div>
+</main>
+
+<!-- SHARE MODAL -->
+<div class="modal" id="shareModal">
+  <div class="box">
+    <h3>Condividi il progetto <button class="x" data-close>✕</button></h3>
+    <div class="body">
+      <p><b>Metodo 1 — Codice (funziona ovunque).</b> Copia il codice e incollalo a un amico: lui apre la sua app e usa “Incolla codice”. Non dipende dall’indirizzo, quindi va anche tra PC e telefono diversi.</p>
+      <div class="row" style="gap:.4rem">
+        <button class="btn primary" id="btnCopyCode">Copia codice</button>
+        <button class="btn accent" id="btnPasteCode">Incolla codice…</button>
+      </div>
+      <textarea id="shareCode" readonly style="margin-top:.5rem" placeholder="Il codice appare qui"></textarea>
+      <p style="margin-top:.9rem"><b>Metodo 2 — Link.</b> Funziona solo se la app è pubblicata a un indirizzo raggiungibile da tutti (non <code>localhost</code>). Vedi “?” per pubblicarla gratis in 5 minuti.</p>
+      <div class="row" style="gap:.4rem">
+        <button class="btn" id="btnCopyLink">Copia link</button>
+      </div>
+      <textarea id="shareLink" readonly style="margin-top:.5rem" placeholder="Il link appare qui"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- HELP MODAL -->
+<div class="modal" id="helpModal">
+  <div class="box">
+    <h3>Come condividere davvero <button class="x" data-close>✕</button></h3>
+    <div class="body">
+      <p><b>Perché il link su localhost non funziona:</b> <code>localhost</code> è solo il tuo computer. Sull’altro dispositivo quell’indirizzo non esiste, quindi il link non apre nulla — anche se contiene i dati.</p>
+      <p><b>Soluzione veloce senza pubblicare nulla:</b> nel pannello “Condividi” usa il <b>Codice</b>. Lo mandi via chat, l’altro apre la <i>sua</i> copia della app e fa “Incolla codice”. I dati passano, l’indirizzo non conta.</p>
+      <p><b>Per avere un vero link universale (consigliato per il gruppo):</b> pubblica il singolo file su <b>GitHub Pages</b> (gratis):</p>
+      <p style="font-family:var(--mono);font-size:.76rem;white-space:pre-wrap;background:var(--paper-2);padding:.6rem;border-radius:7px">1. crea un repo pubblico, carica index.html
+2. Settings → Pages → Branch: main → Save
+3. dopo ~1 min avrai un URL tipo
+   https://tuonome.github.io/planner/
+4. aprilo, costruisci il percorso, “Copia link”:
+   ora il link con #dati funziona su ogni telefono.</p>
+      <p><b>Mandare il file senza che venga bloccato:</b> ora è tutto in <code>index.html</code> (niente <code>.js</code> da allegare). Se anche l’.html viene filtrato, mettilo in un <code>.zip</code> o su un drive condiviso.</p>
+      <p><b>Lavoro di gruppo ordinato:</b> tieni <code>index.html</code> + il file di progetto (Salva file → <code>.json</code>) in un repo git: ognuno importa, aggiunge, e si fa il merge.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img id="lightboxImg" alt="" /></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+"use strict";
+
+/* ---------- categorie ---------- */
+const TYPES = [
+  ["Animali","🦅","#8a5a2b"],
+  ["Gola / Fiume","🏞️","#1f6f6f"],
+  ["Cascata","💧","#2b74c6"],
+  ["Lago","🌊","#2b9fa8"],
+  ["Mare","⛵","#0e7ea8"],
+  ["Montagna / Escursione","⛰️","#6b7a55"],
+  ["Spiaggia","🏖️","#d9a441"],
+  ["Borgo","🏘️","#b0632e"],
+  ["Castello","🏰","#7a4e8f"],
+  ["Abbazia","⛪","#5a6472"],
+  ["Grotta / Insolito","✨","#c65a2e"],
+  ["Cibo / Vino","🍷","#9d2b3f"],
+  ["Campeggio","⛺","#2f7a3f"],
+  ["Altro","📍","#556169"],
+];
+const typeMeta = (t) => TYPES.find((x) => x[0] === t) || TYPES[TYPES.length - 1];
+
+/* ---------- stato ---------- */
+let state = { v: 2, stops: [], routes: [], activeRouteId: null };
+let legs = [];
+let editingId = null;
+let ui = { tab: "route", search: "", filterType: "" };
+let map, markersLayer, routeLayer;
+
+const $ = (id) => document.getElementById(id);
+const uid = () => Math.random().toString(36).slice(2, 9);
+const byId = (id) => state.stops.find((s) => s.id === id);
+const activeRoute = () => state.routes.find((r) => r.id === state.activeRouteId) || state.routes[0];
+
+/* ---------- mappa ---------- */
+function initMap() {
+  map = L.map("map", { zoomControl: true }).setView([44.0, 3.4], 7);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+  routeLayer = L.layerGroup().addTo(map);
+  map.on("click", (e) => {
+    $("f_coord").value = e.latlng.lat.toFixed(5) + ", " + e.latlng.lng.toFixed(5);
+    openForm();
+  });
+}
+function cssUrl(u) { return String(u).replace(/['")\\]/g, ""); }
+function stopMarker(s, indexInRoute) {
+  const [, emoji, color] = typeMeta(s.type);
+  const photo = (s.photos || [])[0];
+  const bg = photo ? `background-image:url('${cssUrl(photo)}')` : `background:${color}`;
+  const inner = photo ? "" : `<span class="mk-emoji">${emoji}</span>`;
+  const badge = indexInRoute ? `<b class="mk-badge">${indexInRoute}</b>` : "";
+  const dim = indexInRoute ? "" : " dim";
+  return L.divIcon({
+    className: "mk" + dim,
+    html: `<div class="mk-dot" style="${bg}">${inner}${badge}</div>`,
+    iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16],
+  });
+}
+function renderMarkers() {
+  markersLayer.clearLayers();
+  const r = activeRoute();
+  const order = r ? r.stopIds : [];
+  state.stops.forEach((s) => {
+    const pos = order.indexOf(s.id);
+    const m = L.marker([s.lat, s.lng], { icon: stopMarker(s, pos >= 0 ? pos + 1 : 0) });
+    const [tname, emoji] = typeMeta(s.type);
+    m.bindPopup(
+      `<b>${escapeHtml(s.name)}</b><br>${emoji} ${escapeHtml(tname)}` +
+      (s.hours ? `<br>${s.hours} h` : "") + (s.cost ? ` · ${s.cost} €` : "") +
+      `<br><button onclick="app.edit('${s.id}')" style="margin-top:4px">Modifica</button> ` +
+      `<button onclick="app.toggleInclude('${s.id}')">${pos >= 0 ? "Togli dal percorso" : "Aggiungi al percorso"}</button>`
+    );
+    m.addTo(markersLayer);
+  });
+}
+function fitToActive() {
+  const r = activeRoute();
+  const pts = (r ? r.stopIds : []).map(byId).filter(Boolean);
+  const use = pts.length ? pts : state.stops;
+  if (use.length) map.fitBounds(L.latLngBounds(use.map((s) => [s.lat, s.lng])).pad(0.25), { maxZoom: 12 });
+}
+
+/* ---------- routing ---------- */
+async function calcRoute() {
+  legs = []; routeLayer.clearLayers();
+  const r = activeRoute();
+  const pts = r.stopIds.map(byId).filter(Boolean);
+  if (pts.length < 2) { renderTotals(); renderRouteList(); toast("Servono almeno 2 tappe nel percorso."); return; }
+  toast("Calcolo percorso…");
+  const coords = pts.map((s) => `${s.lng},${s.lat}`).join(";");
+  const base = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  const ex = []; if (r.opts.avoidMotorway) ex.push("motorway"); if (r.opts.avoidToll) ex.push("toll");
+  const ask = async (exc) => {
+    const res = await fetch(base + (exc ? "&exclude=" + exc : ""));
+    const data = await res.json();
+    if (data.code !== "Ok" || !data.routes || !data.routes.length) throw new Error(data.code || "no route");
+    return data.routes[0];
+  };
+  try {
+    let route;
+    try { route = await ask(ex.join(",")); }
+    catch (e1) { if (ex.length) { route = await ask(""); toast("Esclusione non disponibile: percorso standard."); } else throw e1; }
+    legs = route.legs.map((l) => ({ distance: l.distance, duration: l.duration }));
+    const line = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    L.polyline(line, { color: css("--route"), weight: 5, opacity: .85 }).addTo(routeLayer);
+    map.fitBounds(L.polyline(line).getBounds().pad(.15));
+    toast("Percorso su strade reali calcolato.");
+  } catch (err) {
+    legs = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const d = haversine(pts[i], pts[i + 1]) * 1.3;
+      legs.push({ distance: d, duration: (d / 1000 / 75) * 3600, estimated: true });
+    }
+    L.polyline(pts.map((s) => [s.lat, s.lng]), { color: css("--route"), weight: 4, opacity: .7, dashArray: "6 6" }).addTo(routeLayer);
+    toast("OSRM non raggiungibile: distanze stimate.");
+  }
+  renderTotals(); renderRouteList();
+}
+function haversine(a, b) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function optimizeOrder() {
+  const r = activeRoute(); const ids = [...r.stopIds];
+  if (ids.length < 3) { toast("Servono almeno 3 tappe."); return; }
+  const pts = ids.map(byId); const used = Array(pts.length).fill(false);
+  const order = [0]; used[0] = true;
+  for (let k = 1; k < pts.length; k++) {
+    const last = pts[order[order.length - 1]]; let best = -1, bd = Infinity;
+    for (let j = 0; j < pts.length; j++) if (!used[j]) { const d = haversine(last, pts[j]); if (d < bd) { bd = d; best = j; } }
+    order.push(best); used[best] = true;
+  }
+  r.stopIds = order.map((i) => ids[i]);
+  legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  toast("Ordine ottimizzato dal 1º punto.");
+}
+
+/* ---------- riepilogo ---------- */
+function renderTotals() {
+  const r = activeRoute();
+  const pts = r ? r.stopIds.map(byId).filter(Boolean) : [];
+  const dist = legs.reduce((a, l) => a + l.distance, 0);
+  const dur = legs.reduce((a, l) => a + l.duration, 0);
+  const cost = pts.reduce((a, s) => a + (Number(s.cost) || 0), 0);
+  const visit = pts.reduce((a, s) => a + (Number(s.hours) || 0), 0);
+  const est = legs.some((l) => l.estimated);
+  $("sumName").textContent = r ? r.name : "";
+  $("totals").innerHTML = `
+    <div class="t"><b>${pts.length}</b><span>tappe</span></div>
+    <div class="t"><b>${dist ? (dist / 1000).toFixed(0) : "—"}${est ? "*" : ""}</b><span>km</span></div>
+    <div class="t"><b>${dur ? fmtDur(dur) : "—"}${est ? "*" : ""}</b><span>guida</span></div>
+    <div class="t"><b>${cost || "—"}</b><span>€ tappe</span></div>
+    <div class="t"><b>${visit || "—"}</b><span>h visite</span></div>
+    <div class="t"><b>${nights(pts)}</b><span>notti</span></div>`;
+}
+function nights(pts) {
+  const ds = pts.flatMap((s) => [s.arrival, s.departure]).filter(Boolean).sort();
+  if (ds.length < 2) return "—";
+  const n = Math.round((new Date(ds[ds.length - 1]) - new Date(ds[0])) / 86400000);
+  return n > 0 ? n : "—";
+}
+function fmtDur(sec) { const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h ? `${h}h${String(m).padStart(2, "0")}` : `${m}m`; }
+
+/* ---------- lista percorso ---------- */
+function renderRouteList() {
+  const r = activeRoute(); const ol = $("routeList");
+  const pts = r ? r.stopIds.map(byId).filter(Boolean) : [];
+  if (!pts.length) { ol.innerHTML = `<li class="empty">Percorso vuoto. Vai su “Tutti i luoghi” e spunta le tappe da includere.</li>`; return; }
+  let html = "";
+  pts.forEach((s, i) => {
+    html += stopRowHtml(s, i + 1, true);
+    if (legs[i]) html += `<li class="leg">${(legs[i].distance / 1000).toFixed(0)} km · ${fmtDur(legs[i].duration)}${legs[i].estimated ? " (stima)" : ""}</li>`;
+  });
+  ol.innerHTML = html;
+}
+function stopRowHtml(s, idx, inRoute) {
+  const [tname, emoji] = typeMeta(s.type);
+  const dots = "●".repeat(s.effort || 0) + "○".repeat(5 - (s.effort || 0));
+  const dates = [s.arrival, s.departure].filter(Boolean).join(" → ");
+  const meta = [tname, s.hours ? s.hours + "h" : "", s.cost ? s.cost + "€" : "", dates].filter(Boolean).join(" · ");
+  const photo = (s.photos || [])[0];
+  const thumb = photo
+    ? `<div class="thumb" style="background-image:url('${escapeAttr(cssUrl(photo))}')" onclick="app.zoom('${escapeAttr(photo)}')"></div>`
+    : `<div class="thumb">${emoji}</div>`;
+  const links = (s.links || []).map((u) => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener">${escapeHtml(shortUrl(u))}</a>`).join("");
+  const controls = inRoute
+    ? `<button class="btn mini" onclick="app.move('${s.id}',-1)">↑</button>
+       <button class="btn mini" onclick="app.move('${s.id}',1)">↓</button>
+       <button class="btn mini" onclick="app.fly('${s.id}')">Mappa</button>
+       <button class="btn mini" onclick="app.edit('${s.id}')">Modifica</button>
+       <button class="btn mini" onclick="app.toggleInclude('${s.id}')">Togli</button>`
+    : "";
+  return `<li class="stop">
+    <div class="idx">${idx}</div>${thumb}
+    <div class="grow">
+      <div class="name">${escapeHtml(s.name)}</div>
+      <div class="meta">${escapeHtml(meta)} · <span class="effort">${dots}</span></div>
+      ${s.desc ? `<div class="desc">${escapeHtml(s.desc)}</div>` : ""}
+      ${links ? `<div class="links">${links}</div>` : ""}
+      <div class="acts">${controls}</div>
+    </div></li>`;
+}
+
+/* ---------- lista tutti i luoghi ---------- */
+function renderPlaceList() {
+  const ul = $("placeList"); const r = activeRoute();
+  const inSet = new Set(r ? r.stopIds : []);
+  let list = state.stops.slice();
+  if (ui.search) list = list.filter((s) => s.name.toLowerCase().includes(ui.search.toLowerCase()));
+  if (ui.filterType) list = list.filter((s) => s.type === ui.filterType);
+  $("tabPlacesBtn").textContent = `Tutti i luoghi (${state.stops.length})`;
+  if (!list.length) { ul.innerHTML = `<li class="empty">Nessun luogo. Aggiungine uno col form qui sotto.</li>`; return; }
+  ul.innerHTML = list.map((s) => {
+    const [tname, emoji] = typeMeta(s.type);
+    const photo = (s.photos || [])[0];
+    const thumb = photo
+      ? `<div class="thumb" style="background-image:url('${escapeAttr(cssUrl(photo))}')" onclick="app.zoom('${escapeAttr(photo)}')"></div>`
+      : `<div class="thumb">${emoji}</div>`;
+    const on = inSet.has(s.id);
+    return `<li class="place ${on ? "inroute" : ""}">
+      <input type="checkbox" class="chkbox" ${on ? "checked" : ""} onchange="app.toggleInclude('${s.id}')" title="Nel percorso attivo">
+      ${thumb}
+      <div class="grow">
+        <div class="name">${escapeHtml(s.name)}</div>
+        <div class="meta">${escapeHtml(tname)}${s.hours ? " · " + s.hours + "h" : ""}${s.cost ? " · " + s.cost + "€" : ""}</div>
+        <div class="acts">
+          <button class="btn mini" onclick="app.fly('${s.id}')">Mappa</button>
+          <button class="btn mini" onclick="app.edit('${s.id}')">Modifica</button>
+          <button class="btn mini" onclick="app.del('${s.id}')">Elimina</button>
+        </div>
+      </div></li>`;
+  }).join("");
+}
+
+/* ---------- route selector ---------- */
+function renderRouteSelect() {
+  const sel = $("routeSel");
+  sel.innerHTML = state.routes.map((r) => `<option value="${r.id}" ${r.id === state.activeRouteId ? "selected" : ""}>${escapeHtml(r.name)} (${r.stopIds.length})</option>`).join("");
+  const r = activeRoute();
+  $("optMotorway").checked = !!(r && r.opts.avoidMotorway);
+  $("optToll").checked = !!(r && r.opts.avoidToll);
+}
+function renderAll() { renderRouteSelect(); renderMarkers(); renderRouteList(); renderPlaceList(); renderTotals(); flashSaved(); }
+
+/* ---------- app actions ---------- */
+const app = {
+  edit(id) {
+    const s = byId(id); if (!s) return;
+    editingId = id; fillForm(s); openForm();
+    $("formTitle").firstChild.textContent = "Modifica luogo ";
+    $("btnSave").textContent = "Aggiorna luogo"; $("btnCancel").hidden = false;
+    $("f_addToRoute").parentElement.style.display = "none";
+    $("panel").scrollTo({ top: 0, behavior: "smooth" }); map.panTo([s.lat, s.lng]);
+  },
+  del(id) {
+    if (!confirm("Eliminare questo luogo da TUTTI i percorsi?")) return;
+    state.stops = state.stops.filter((s) => s.id !== id);
+    state.routes.forEach((r) => { r.stopIds = r.stopIds.filter((x) => x !== id); });
+    if (editingId === id) clearForm();
+    legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  },
+  move(id, dir) {
+    const r = activeRoute(); const i = r.stopIds.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= r.stopIds.length) return;
+    [r.stopIds[i], r.stopIds[j]] = [r.stopIds[j], r.stopIds[i]];
+    legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  },
+  toggleInclude(id) {
+    const r = activeRoute(); const i = r.stopIds.indexOf(id);
+    if (i >= 0) r.stopIds.splice(i, 1); else r.stopIds.push(id);
+    legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  },
+  fly(id) { const s = byId(id); if (s) map.flyTo([s.lat, s.lng], 12); },
+  zoom(u) { $("lightboxImg").src = u; $("lightbox").classList.add("show"); },
+};
+window.app = app;
+
+/* ---------- routes CRUD ---------- */
+function newRoute(name) {
+  const r = { id: uid(), name: name || `Percorso ${state.routes.length + 1}`, stopIds: [], opts: { avoidMotorway: false, avoidToll: false }, notes: "" };
+  state.routes.push(r); state.activeRouteId = r.id; legs = []; persist(); renderAll();
+}
+function setupRouteButtons() {
+  $("routeSel").addEventListener("change", (e) => { state.activeRouteId = e.target.value; legs = []; routeLayer.clearLayers(); persist(); renderAll(); fitToActive(); });
+  $("btnRouteNew").addEventListener("click", () => { const n = prompt("Nome del nuovo percorso:", `Percorso ${state.routes.length + 1}`); if (n !== null) newRoute(n.trim() || undefined); });
+  $("btnRouteRename").addEventListener("click", () => { const r = activeRoute(); const n = prompt("Rinomina percorso:", r.name); if (n) { r.name = n.trim(); persist(); renderAll(); } });
+  $("btnRouteDup").addEventListener("click", () => { const r = activeRoute(); const c = { id: uid(), name: r.name + " (copia)", stopIds: [...r.stopIds], opts: { ...r.opts }, notes: r.notes }; state.routes.push(c); state.activeRouteId = c.id; legs = []; persist(); renderAll(); });
+  $("btnRouteDel").addEventListener("click", () => {
+    if (state.routes.length <= 1) { toast("Deve restare almeno un percorso."); return; }
+    if (!confirm("Eliminare il percorso attivo? (i luoghi restano nella lista)")) return;
+    state.routes = state.routes.filter((r) => r.id !== state.activeRouteId);
+    state.activeRouteId = state.routes[0].id; legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  });
+  $("btnOptimize").addEventListener("click", optimizeOrder);
+  $("btnGPX").addEventListener("click", exportGPX);
+  $("btnRoute").addEventListener("click", calcRoute);
+  $("optMotorway").addEventListener("change", (e) => { activeRoute().opts.avoidMotorway = e.target.checked; persist(); });
+  $("optToll").addEventListener("change", (e) => { activeRoute().opts.avoidToll = e.target.checked; persist(); });
+}
+
+/* ---------- form ---------- */
+function buildTypeSelects() {
+  $("f_type").innerHTML = TYPES.map(([n, e]) => `<option value="${n}">${e} ${n}</option>`).join("");
+  $("filterType").innerHTML = `<option value="">Tutti i tipi</option>` + TYPES.map(([n, e]) => `<option value="${n}">${e} ${n}</option>`).join("");
+}
+function rowInput(container, value) {
+  const div = document.createElement("div"); div.className = "r";
+  div.innerHTML = `<input type="url" value="${escapeAttr(value || "")}" placeholder="https://…"><button type="button" class="btn mini">✕</button>`;
+  div.querySelector("button").addEventListener("click", () => div.remove());
+  container.appendChild(div);
+}
+function collectRows(container) { return [...container.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean); }
+function setRows(container, values) { container.innerHTML = ""; (values && values.length ? values : [""]).forEach((v) => rowInput(container, v)); }
+
+function openForm() { $("formBody").style.display = ""; }
+function readForm() {
+  const c = parseCoord($("f_coord").value);
+  if (!$("f_name").value.trim()) { toast("Manca il nome."); return null; }
+  if (!c) { toast("Coordinate non valide (usa: lat, lng)."); return null; }
+  return {
+    id: editingId || uid(), name: $("f_name").value.trim(), lat: c.lat, lng: c.lng,
+    type: $("f_type").value, effort: parseInt($("f_effort").value, 10) || 3,
+    arrival: $("f_arrival").value || "", departure: $("f_departure").value || "",
+    hours: $("f_hours").value ? parseFloat($("f_hours").value) : "",
+    cost: $("f_cost").value ? parseFloat($("f_cost").value) : "",
+    desc: $("f_desc").value.trim(),
+    photos: collectRows($("f_photos_rows")), links: collectRows($("f_links_rows")),
+  };
+}
+function fillForm(s) {
+  $("f_name").value = s.name || ""; $("f_coord").value = s.lat != null ? `${s.lat}, ${s.lng}` : "";
+  $("f_type").value = s.type || TYPES[0][0]; $("f_effort").value = s.effort || 3;
+  $("f_arrival").value = s.arrival || ""; $("f_departure").value = s.departure || "";
+  $("f_hours").value = s.hours ?? ""; $("f_cost").value = s.cost ?? ""; $("f_desc").value = s.desc || "";
+  setRows($("f_photos_rows"), s.photos); setRows($("f_links_rows"), s.links);
+}
+function clearForm() {
+  editingId = null; $("stopForm").reset();
+  $("f_type").value = TYPES[0][0]; $("f_effort").value = 3;
+  setRows($("f_photos_rows"), []); setRows($("f_links_rows"), []);
+  $("formTitle").firstChild.textContent = "Nuovo luogo ";
+  $("btnSave").textContent = "Salva luogo"; $("btnCancel").hidden = true;
+  $("f_addToRoute").parentElement.style.display = ""; $("f_addToRoute").checked = true;
+}
+function saveStop(e) {
+  e.preventDefault(); const s = readForm(); if (!s) return;
+  const idx = state.stops.findIndex((x) => x.id === s.id);
+  if (idx >= 0) state.stops[idx] = s; else state.stops.push(s);
+  if (idx < 0 && $("f_addToRoute").checked) { const r = activeRoute(); if (r && !r.stopIds.includes(s.id)) r.stopIds.push(s.id); }
+  const wasNew = idx < 0; clearForm(); legs = []; routeLayer.clearLayers(); persist(); renderAll();
+  if (wasNew) map.panTo([s.lat, s.lng]);
+  toast(idx >= 0 ? "Luogo aggiornato." : "Luogo aggiunto.");
+}
+
+/* ---------- geocoding (Nominatim) ---------- */
+let geoCache = {};
+async function geocode() {
+  const q = $("f_name").value.trim(); if (!q) { toast("Scrivi prima un nome."); return; }
+  toast("Cerco le coordinate…");
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=it&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    const data = await res.json();
+    if (!data.length) { toast("Nessun risultato: prova un nome più preciso."); return; }
+    const hit = data[0];
+    $("f_coord").value = parseFloat(hit.lat).toFixed(5) + ", " + parseFloat(hit.lon).toFixed(5);
+    map.setView([hit.lat, hit.lon], 12);
+    toast("Trovato: " + hit.display_name.split(",").slice(0, 2).join(","));
+  } catch (e) { toast("Ricerca non riuscita (rete?)."); }
+}
+
+/* ---------- GPX ---------- */
+function exportGPX() {
+  const r = activeRoute(); const pts = r.stopIds.map(byId).filter(Boolean);
+  if (!pts.length) { toast("Percorso vuoto."); return; }
+  let g = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Planner Sud Francia" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+  pts.forEach((s) => { g += `  <wpt lat="${s.lat}" lon="${s.lng}"><name>${xml(s.name)}</name></wpt>\n`; });
+  g += `  <rte><name>${xml(r.name)}</name>\n` + pts.map((s) => `    <rtept lat="${s.lat}" lon="${s.lng}"><name>${xml(s.name)}</name></rtept>`).join("\n") + `\n  </rte>\n</gpx>`;
+  download(`${r.name}.gpx`, g, "application/gpx+xml");
+  toast("GPX esportato.");
+}
+
+/* ---------- persistenza ---------- */
+const LS_KEY = "sudfrancia-planner-v2";
+let saveTimer;
+function persist() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+}
+function flashSaved() {
+  $("saveState").textContent = "salvato in locale ✓";
+  clearTimeout(saveTimer); saveTimer = setTimeout(() => { $("saveState").textContent = "salvato in locale"; }, 1200);
+}
+function normalize(d) {
+  if (!d) return null;
+  if (d.routes) { d.stops = d.stops || []; d.routes.forEach((r) => { r.opts = r.opts || { avoidMotorway: false, avoidToll: false }; r.stopIds = r.stopIds || []; }); if (!d.activeRouteId || !d.routes.find((r) => r.id === d.activeRouteId)) d.activeRouteId = d.routes[0] ? d.routes[0].id : null; return d; }
+  // migrazione v1 -> v2
+  const stops = (d.stops || []).map((s) => ({ links: [], ...s, id: s.id || uid() }));
+  const r = { id: uid(), name: "Percorso 1", stopIds: stops.map((s) => s.id), opts: d.opts || { avoidMotorway: false, avoidToll: false }, notes: "" };
+  return { v: 2, stops, routes: [r], activeRouteId: r.id };
+}
+function ensureRoute() { if (!state.routes.length) newRoute("Percorso 1"); if (!state.activeRouteId) state.activeRouteId = state.routes[0].id; }
+function loadLocal() { try { const raw = localStorage.getItem(LS_KEY) || localStorage.getItem("sudfrancia-planner-v1"); if (raw) { const n = normalize(JSON.parse(raw)); if (n) state = n; } } catch (e) {} }
+
+/* ---------- codice/link condivisione ---------- */
+async function gzip(str) { const cs = new CompressionStream("gzip"); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
+async function gunzip(b) { const ds = new DecompressionStream("gzip"); const w = ds.writable.getWriter(); w.write(b); w.close(); return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer()); }
+function b64u(b) { let s = ""; for (const x of b) s += String.fromCharCode(x); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function unb64u(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; const bin = atob(s); const b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }
+async function encodeState() { const json = JSON.stringify(state); if (typeof CompressionStream !== "undefined") return "z" + b64u(await gzip(json)); return "p" + b64u(new TextEncoder().encode(json)); }
+async function decodeState(str) { const m = str[0], p = unb64u(str.slice(1)); const json = m === "z" ? await gunzip(p) : new TextDecoder().decode(p); return normalize(JSON.parse(json)); }
+
+async function openShare() {
+  const enc = await encodeState();
+  $("shareCode").value = enc;
+  const url = location.origin + location.pathname + "#" + enc;
+  history.replaceState(null, "", url);
+  $("shareLink").value = url;
+  $("shareModal").classList.add("show");
+}
+async function pasteCode() {
+  const code = prompt("Incolla qui il codice ricevuto:"); if (!code) return;
+  try { const n = await decodeState(code.trim()); if (!confirm("Sostituire il progetto attuale con quello ricevuto? (fai prima “Salva file” se vuoi tenerlo)")) return; state = n; ensureRoute(); legs = []; routeLayer.clearLayers(); persist(); renderAll(); fitToActive(); closeModals(); toast("Progetto caricato dal codice."); }
+  catch (e) { toast("Codice non valido."); }
+}
+
+/* ---------- salva/apri file progetto ---------- */
+function saveFile() { download("progetto-sud-francia.json", JSON.stringify(state, null, 2), "application/json"); toast("Progetto salvato su file."); }
+function openFile(file) {
+  const r = new FileReader();
+  r.onload = () => { try { const n = normalize(JSON.parse(r.result)); if (!n) throw 0; if (!confirm("Aprire questo progetto? Sostituisce quello attuale.")) return; state = n; ensureRoute(); legs = []; routeLayer.clearLayers(); persist(); renderAll(); fitToActive(); toast("Progetto aperto."); } catch (e) { toast("File non valido."); } };
+  r.readAsText(file);
+}
+
+/* ---------- util ---------- */
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#c65a2e"; }
+function parseCoord(str) { const m = String(str).split(/[,; ]+/).map(parseFloat).filter((x) => !isNaN(x)); if (m.length < 2) return null; const [lat, lng] = m; if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null; return { lat, lng }; }
+function shortUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u.slice(0, 24); } }
+function download(name, text, type) { const b = new Blob([text], { type }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function escapeAttr(s) { return escapeHtml(s).replace(/'/g, "&#39;"); }
+function xml(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function closeModals() { document.querySelectorAll(".modal").forEach((m) => m.classList.remove("show")); }
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600); }
+
+/* ---------- init ---------- */
+async function boot() {
+  buildTypeSelects(); initMap();
+  if (location.hash.length > 1) { try { state = await decodeState(decodeURIComponent(location.hash.slice(1))); } catch (e) { loadLocal(); } }
+  else loadLocal();
+  ensureRoute(); clearForm(); renderAll(); fitToActive();
+
+  // tabs
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll(".tabpane").forEach((x) => x.classList.remove("active"));
+    t.classList.add("active"); $("pane-" + t.dataset.tab).classList.add("active"); ui.tab = t.dataset.tab;
+  }));
+  // form
+  $("stopForm").addEventListener("submit", saveStop);
+  $("btnCancel").addEventListener("click", clearForm);
+  $("btnGeocode").addEventListener("click", geocode);
+  $("btnAddPhoto").addEventListener("click", () => rowInput($("f_photos_rows"), ""));
+  $("btnAddLink").addEventListener("click", () => rowInput($("f_links_rows"), ""));
+  $("btnFormToggle").addEventListener("click", (e) => { e.preventDefault(); const b = $("formBody"); b.style.display = b.style.display === "none" ? "" : "none"; });
+  // filters
+  $("search").addEventListener("input", (e) => { ui.search = e.target.value; renderPlaceList(); });
+  $("filterType").addEventListener("change", (e) => { ui.filterType = e.target.value; renderPlaceList(); });
+  // routes
+  setupRouteButtons();
+  // header
+  $("btnShare").addEventListener("click", openShare);
+  $("btnSaveFile").addEventListener("click", saveFile);
+  $("btnOpenFile").addEventListener("click", () => $("fileOpen").click());
+  $("fileOpen").addEventListener("change", (e) => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ""; });
+  $("btnHelp").addEventListener("click", () => $("helpModal").classList.add("show"));
+  // share modal buttons
+  $("btnCopyCode").addEventListener("click", async () => { $("shareCode").select(); try { await navigator.clipboard.writeText($("shareCode").value); toast("Codice copiato."); } catch (e) { toast("Seleziona e copia manualmente."); } });
+  $("btnCopyLink").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("shareLink").value); toast(location.hostname === "localhost" || location.protocol === "file:" ? "Link copiato (ma su localhost non si apre altrove: usa il Codice)." : "Link copiato."); } catch (e) { toast("Seleziona e copia manualmente."); } });
+  $("btnPasteCode").addEventListener("click", pasteCode);
+  // modals & lightbox close
+  document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModals));
+  document.querySelectorAll(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) closeModals(); }));
+  $("lightbox").addEventListener("click", () => $("lightbox").classList.remove("show"));
+}
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>
